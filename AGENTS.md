@@ -118,7 +118,21 @@ The verdict must be a decision, not a summary. Judge on:
 **Differences under ~8 points at `--samples 2` are noise.** Say so rather than declaring a
 winner. Raise `--samples` before calling a close race.
 
-## Step 6 — install the winner
+## Step 6 — check it through the harness you actually use
+
+The suites above measure the model through benchkit's own tool loop, which is nobody's real
+setup. If a coding agent is installed on this machine, measure through it too:
+
+```bash
+./bench harness list
+./bench harness run --harness pi --suite agentic-hard --samples 2
+```
+
+The gap is not cosmetic — on this repo's first such comparison the same model scored 67.4
+through the built-in loop and 77.4 through pi. When you report a number, name the harness it
+came from.
+
+## Step 7 — install the winner
 
 ```bash
 ./bench configs
@@ -138,7 +152,12 @@ row is a guess, not a known-good config.
 - **Do not report a number you did not measure.** No estimating, no carrying a figure over
   from another machine, no quoting the model card.
 - **Report failures that were the harness's fault as such.** One `run_python` bug in this
-  repo cost a model 12.5 points until it was found; the model was innocent.
+  repo cost a model 12.5 points until it was found; the model was innocent. When driving an
+  external harness, a run with zero turns is almost always a wiring problem, not a model
+  failure — check `docs/HARNESSES.md` before recording it.
+- **Never let a harness extension call a different model.** pi's extensions can; the adapter
+  passes `--no-extensions` for exactly this reason. Verify the equivalent for any harness you
+  add, or the benchmark silently measures something else.
 - **If a suite returns ~100 %, say it has stopped measuring** rather than calling the model
   perfect. Then write harder tasks — see `docs/REPRODUCING.md`.
 
