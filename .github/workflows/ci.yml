@@ -25,8 +25,13 @@ jobs:
       - name: Run mypy
         run: uv run mypy benchkit router.py --ignore-missing-imports
 
-      - name: Run bench validate
-        run: uv run ./bench validate
+      - name: Run bench validate with coverage
+        run: uv run coverage run --source=benchkit --parallel-mode -m benchkit.cli validate
 
-      - name: Run bench validate agentic-all
-        run: uv run ./bench validate --suite agentic-all
+      - name: Run bench validate agentic-all with coverage
+        run: uv run coverage run --source=benchkit --parallel-mode -m benchkit.cli validate --suite agentic-all
+
+      - name: Combine and report coverage
+        run: |
+          uv run coverage combine
+          uv run coverage report
