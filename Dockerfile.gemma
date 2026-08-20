@@ -1,0 +1,22 @@
+# The base image ships transformers 5.8.1, which does not know the
+# `gemma4_unified` model type used by every Gemma 4 checkpoint. vLLM itself
+# already registers Gemma4UnifiedForConditionalGeneration, so only the
+# transformers config layer needs updating.
+#
+# Scoped to the gemma backend on purpose: the Qwen NVFP4 container keeps
+# running the untouched upstream image.
+FROM ghcr.io/miaai-lab/mia-vllm-gb10-linear-b12x:latest
+
+# torch/flashinfer are pinned to this image's CUDA 13 arm64 build -- never let
+# a transitive resolve swap them out.
+RUN pip install --no-cache-dir --upgrade \
+      --constraint /dev/stdin \
+      "transformers==5.14.1" <<'EOF'
+torch==2.11.0
+EOF
+
+RUN python3 -c "\
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES as M; \
+assert 'gemma4_unified' in M, 'gemma4_unified still missing'; \
+import transformers, torch; \
+print('transformers', transformers.__version__, '| torch', torch.__version__)"

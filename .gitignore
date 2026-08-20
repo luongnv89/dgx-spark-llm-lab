@@ -1,0 +1,10 @@
+# Model weights and compiler caches — huge, reproducible from Hugging Face
+hf-cache/
+vllm-cache/
+
+# Python
+__pycache__/
+*.pyc
+
+# Transient service logs (benchmark logs under benchmarks/ ARE tracked)
+vllm-qwen-restore.log

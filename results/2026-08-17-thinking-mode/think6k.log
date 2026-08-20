@@ -1,0 +1,62 @@
+endpoint=http://localhost:8001/v1 model=montimage-dgx-spark tasks=16 samples=2 concurrency=4
+
+Single-stream probe (warm, no concurrency)...
+  ttft=11.66s  gen=341tok  25.2 tok/s
+
+  PASS  two_sum            s1   238tok 11.7s 20.4tok/s
+  PASS  roman              s1   471tok 18.6s 25.3tok/s
+  PASS  roman              s0   612tok 21.6s 28.3tok/s
+  PASS  balanced           s0   208tok 10.1s 20.6tok/s
+  PASS  two_sum            s0   513tok 21.8s 23.5tok/s
+  PASS  balanced           s1   252tok 10.6s 23.8tok/s
+  PASS  lru_cache          s1   590tok 21.2s 27.9tok/s
+  PASS  lru_cache          s0   827tok 36.5s 22.7tok/s
+  PASS  merge_intervals    s0   493tok 19.0s 26.0tok/s
+  PASS  word_freq          s0  1128tok 55.8s 20.2tok/s
+  PASS  merge_intervals    s1   493tok 20.1s 24.6tok/s
+  PASS  word_freq          s1  1378tok 64.3s 21.4tok/s
+  PASS  edit_distance      s1   543tok 23.6s 23.0tok/s
+  PASS  edit_distance      s0  1067tok 41.1s 25.9tok/s
+  PASS  version_cmp        s0   674tok 24.7s 27.3tok/s
+  PASS  version_cmp        s1   428tok 16.4s 26.1tok/s
+  PASS  retry_decorator    s1  5139tok 251.9s 20.4tok/s
+  FAIL  flatten_json       s0  6000tok 302.5s 19.8tok/s  <NameError: name 'flatten' is not defined>
+  FAIL  flatten_json       s1  6000tok 308.6s 19.4tok/s  <NameError: name 'flatten' is not defined>
+  FAIL  retry_decorator    s0  6000tok 313.3s 19.1tok/s  <NameError: name 'retry' is not defined. Did you mean: 'repr'?>
+  PASS  topo_sort          s1  3115tok 171.1s 18.2tok/s
+  FAIL  sql_parse          s0  6000tok 344.4s 17.4tok/s  <NameError: name 'parse_select' is not defined>
+  FAIL  sql_parse          s1  6000tok 343.6s 17.5tok/s  <NameError: name 'parse_select' is not defined>
+  FAIL  topo_sort          s0  6000tok 352.0s 17.0tok/s  <NameError: name 'topo_sort' is not defined>
+  FAIL  word_ladder        s0  6000tok 347.5s 17.3tok/s  <NameError: name 'ladder_length' is not defined>
+  FAIL  word_ladder        s1  6000tok 330.1s 18.2tok/s  <NameError: name 'ladder_length' is not defined>
+  FAIL  expr_eval          s1  6000tok 325.1s 18.5tok/s  <NameError: name 'evaluate' is not defined>
+  FAIL  expr_eval          s0  6000tok 371.3s 16.2tok/s  <NameError: name 'evaluate' is not defined>
+  PASS  rate_limiter       s0  1116tok 57.3s 19.5tok/s
+  PASS  rate_limiter       s1  2588tok 132.7s 19.5tok/s
+  FAIL  diff_lines         s0  6000tok 311.9s 19.2tok/s  <NameError: name 'diff' is not defined>
+  FAIL  diff_lines         s1  6000tok 311.1s 19.3tok/s  <NameError: name 'diff' is not defined>
+
+============================================================
+                       model: montimage-dgx-spark
+                    endpoint: http://localhost:8001/v1
+                       tasks: 16
+                     samples: 2
+                 concurrency: 4
+                 generations: 32
+                   pass_at_1: 0.625
+            pass_all_samples: 0.5625
+             pass_any_sample: 0.6875
+                wall_seconds: 1364.7205227692612
+         single_stream_tok_s: 25.155913231820378
+          single_stream_ttft: 11.664912765845656
+      mean_completion_tokens: 2933.53125
+    median_completion_tokens: 1378
+       mean_tok_s_concurrent: 21.35577895594225
+             aggregate_tok_s: 68.78551207650557
+                   mean_ttft: 48.38128591103013
+               by_difficulty: {'easy': 1.0, 'medium': 0.6428571428571429, 'hard': 0.3}
+============================================================
+
+written to results.json
+
+[process exited while detached; exit code unknown]

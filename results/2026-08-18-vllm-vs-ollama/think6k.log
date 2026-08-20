@@ -1,0 +1,54 @@
+model=qwen3.8-27b-bench base=http://localhost:11434/v1 thinking=True max_tokens=6000 concurrency=1 samples=2 tasks=16
+  PASS  two_sum            s0    229tok 9s 26.6tok/s
+  PASS  two_sum            s1    200tok 8s 26.5tok/s
+  PASS  roman              s0    355tok 12s 29.0tok/s
+  PASS  roman              s1    433tok 14s 31.1tok/s
+  PASS  balanced           s0    212tok 10s 22.0tok/s
+  PASS  balanced           s1    218tok 14s 15.6tok/s
+  PASS  word_freq          s0    421tok 13s 32.6tok/s
+  PASS  word_freq          s1    585tok 20s 29.7tok/s
+  PASS  lru_cache          s0   1078tok 33s 32.4tok/s
+  PASS  lru_cache          s1    636tok 22s 29.1tok/s
+  PASS  merge_intervals    s0    237tok 8s 28.6tok/s
+  PASS  merge_intervals    s1    230tok 9s 24.6tok/s
+  PASS  edit_distance      s0    394tok 13s 31.1tok/s
+  PASS  edit_distance      s1    518tok 16s 32.8tok/s
+  PASS  flatten_json       s0   1156tok 41s 28.5tok/s
+  PASS  flatten_json       s1    856tok 30s 28.3tok/s
+  PASS  version_cmp        s0    650tok 20s 32.4tok/s
+  PASS  version_cmp        s1    288tok 9s 31.7tok/s
+  PASS  retry_decorator    s0    553tok 20s 27.4tok/s
+  PASS  retry_decorator    s1    425tok 13s 32.0tok/s
+  FAIL  sql_parse          s0    953tok 33s 28.7tok/s  <TypeError: first argument must be string or compiled pattern>
+  PASS  sql_parse          s1   1140tok 40s 28.6tok/s
+  PASS  topo_sort          s0    698tok 23s 30.6tok/s
+  PASS  topo_sort          s1    735tok 23s 32.2tok/s
+  PASS  word_ladder        s0   1163tok 41s 28.7tok/s
+  PASS  word_ladder        s1   1487tok 50s 29.9tok/s
+  PASS  expr_eval          s0    845tok 28s 30.4tok/s
+  PASS  expr_eval          s1   2269tok 77s 29.6tok/s
+  PASS  diff_lines         s0   5721tok 203s 28.2tok/s
+  PASS  diff_lines         s1   3594tok 122s 29.6tok/s
+  PASS  rate_limiter       s0    973tok 33s 29.5tok/s
+  PASS  rate_limiter       s1    830tok 29s 28.9tok/s
+
+{
+  "model": "qwen3.8-27b-bench",
+  "thinking": true,
+  "max_tokens": 6000,
+  "concurrency": 1,
+  "generations": 32,
+  "pass_at_1": 0.96875,
+  "pass_any": 1.0,
+  "by_difficulty": {
+    "easy": 1.0,
+    "medium": 0.9285714285714286,
+    "hard": 1.0
+  },
+  "truncated": 0,
+  "errors": 0,
+  "wall_seconds": 1033.4670459586196,
+  "mean_completion_tokens": 940.0625,
+  "mean_tok_s": 28.962719713545,
+  "mean_ttft": 0.9319159044971457
+}
