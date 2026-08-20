@@ -43,7 +43,7 @@ class TestEnvExample(unittest.TestCase):
     def test_has_comments(self):
         """Every variable must have a descriptive comment (line starting with #)."""
         lines = self.content.splitlines()
-        var_lines = [l for l in lines if re.match(r"^\w+=", l)]
+        var_lines = [line for line in lines if re.match(r"^\w+=", line)]
         for var_line in var_lines:
             var_name = var_line.split("=")[0].strip()
             # There should be a comment line (starting with #) within a few lines

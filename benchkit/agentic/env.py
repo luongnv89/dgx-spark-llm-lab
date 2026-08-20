@@ -60,7 +60,7 @@ class Workspace:
             raise ToolError(f"no such file: {path}. Use list_files to see what exists.")
         body = self.files[path]
         lines = body.splitlines()
-        return "\n".join(f"{i:>4}| {l}" for i, l in enumerate(lines, 1))[:MAX_OUTPUT]
+        return "\n".join(f"{i:>4}| {line}" for i, line in enumerate(lines, 1))[:MAX_OUTPUT]
 
     def write_file(self, path, content):
         path = path.strip("/")

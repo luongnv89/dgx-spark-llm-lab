@@ -60,7 +60,7 @@ def _chart(title, y_label, categories, values, y_max=None, kind="bar"):
 def build(runs, title, question=None, verdict=None, notes=None, short_labels=None):
     """runs: list of loaded result dicts. Returns Markdown source."""
     labels = [_label(r) for r in runs]
-    short = short_labels or [_short(r, l) for r, l in zip(runs, labels)]
+    short = short_labels or [_short(r, line) for r, line in zip(runs, labels)]
     S = [r["summary"] for r in runs]
 
     out = [f"# {title}\n"]
@@ -122,7 +122,7 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     else:
         out.append(f"| Samples per task | {samples} |")
     out.append(f"| Concurrency | {conc} |")
-    out.append(f"| Metric | pass@1 over hidden executable unit tests |\n")
+    out.append("| Metric | pass@1 over hidden executable unit tests |\n")
     if not (conc_same and samples_same):
         out.append("<sub>The runs above were **not** all collected under the same settings. "
                    "Solve rate and tool-call counts are unaffected, but wall-clock is not "
@@ -215,7 +215,7 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
                '    title "pass@1 by difficulty (%)"\n'
                '    x-axis ["easy", "medium", "hard"]\n'
                '    y-axis "pass@1 %" 0 --> 100\n' + lines + "\n```\n")
-    out.append("<sub>" + " · ".join(f"Line {i+1} = {l}" for i, l in enumerate(labels)) + "</sub>\n")
+    out.append("<sub>" + " · ".join(f"Line {i+1} = {line}" for i, line in enumerate(labels)) + "</sub>\n")
 
     # --- per-task disagreement between best and runner-up ---
     if len(S) >= 2:
@@ -258,7 +258,7 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
         out.append("- A truncated generation counts as a failure; a high `Truncated` column means "
                    "runaway reasoning, which hangs real agents.")
     out.append("\n## Raw data\n")
-    for r, l in zip(runs, labels):
-        out.append(f"- `{r['_path']}` — {l}")
+    for r, line in zip(runs, labels):
+        out.append(f"- `{r['_path']}` — {line}")
     out.append("")
     return "\n".join(out)

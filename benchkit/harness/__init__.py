@@ -2,7 +2,10 @@
 
 See benchkit/harness/base.py for why this exists and ROADMAP.md for what is next.
 """
-from .base import Harness, HarnessResult, run_task
+__all__ = ["Harness", "HarnessResult", "run_task", "PiHarness", "OpenCodeHarness",
+           "ClaudeCodeHarness", "HARNESSES", "get"]
+
+from .base import Harness as Harness, HarnessResult as HarnessResult, run_task as run_task
 from .pi import PiHarness
 from .opencode import OpenCodeHarness
 from .claudecode import ClaudeCodeHarness

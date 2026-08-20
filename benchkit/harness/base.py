@@ -57,7 +57,7 @@ class Harness:
         return container
 
     #: files the harness writes into the workspace that are not part of the task
-    excluded_files = ()
+    excluded_files: tuple[str, ...] = ()
 
     def run(self, workdir, prompt, timeout=900, thinking=False):
         raise NotImplementedError
