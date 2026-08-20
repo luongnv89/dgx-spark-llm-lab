@@ -37,10 +37,10 @@ serve, not a number you quote:
 Built and used on an **NVIDIA DGX Spark (GB10)**, but the harness itself only needs a URL.
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 export BENCH_BASE_URL=http://localhost:8001/v1 BENCH_MODEL=my-model
 
-./bench validate                      # 28/28 — the tests are passable
+./bench validate                      # 44/44 — the tests are passable
 ./bench run --suite all --thinking --max-tokens 16000 --label "my-model think-ON"
 ./bench report results/*/run-*.json --title "My model" --verdict "..."
 ```
