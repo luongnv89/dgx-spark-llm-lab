@@ -80,28 +80,49 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     out.append(f"| Metric | pass@1 over hidden executable unit tests |\n")
 
     # --- results table ---
+    agentic = all(s.get("kind") == "agentic" for s in S)
     out.append("## Results\n")
-    hdr = ("| Run | pass@1 | easy | medium | hard | Wall | Mean out tok | Truncated | tok/s |\n"
-           "|---|---|---|---|---|---|---|---|---|")
-    out.append(hdr)
     best = max(range(len(S)), key=lambda i: S[i]["pass_at_1"])
+    if agentic:
+        out.append("| Run | solved | easy | medium | hard | Mean turns | Mean calls "
+                   "| Valid calls | Turn-limit | Wall |\n"
+                   "|---|---|---|---|---|---|---|---|---|---|")
+    else:
+        out.append("| Run | pass@1 | easy | medium | hard | Wall | Mean out tok "
+                   "| Truncated | tok/s |\n|---|---|---|---|---|---|---|---|---|")
     for i, s in enumerate(S):
         d = s["by_difficulty"]
         name = f"**{labels[i]}**" if i == best else labels[i]
-        out.append(
-            f"| {name} | {_fmt(s['pass_at_1'], pct=True)} | {_fmt(d.get('easy'), pct=True)} "
-            f"| {_fmt(d.get('medium'), pct=True)} | {_fmt(d.get('hard'), pct=True)} "
-            f"| {_fmt(s['wall_seconds'], digits=0)} s | {_fmt(s['mean_completion_tokens'], digits=0)} "
-            f"| {s['truncated']} | {_fmt(s['mean_tok_s'])} |")
+        head = (f"| {name} | {_fmt(s['pass_at_1'], pct=True)} | {_fmt(d.get('easy'), pct=True)} "
+                f"| {_fmt(d.get('medium'), pct=True)} | {_fmt(d.get('hard'), pct=True)} ")
+        if agentic:
+            out.append(head +
+                       f"| {_fmt(s['mean_turns'])} | {_fmt(s['mean_tool_calls'])} "
+                       f"| {_fmt(s['valid_call_rate'], pct=True)} | {s['hit_turn_limit']} "
+                       f"| {_fmt(s['wall_seconds'], digits=0)} s |")
+        else:
+            out.append(head +
+                       f"| {_fmt(s['wall_seconds'], digits=0)} s "
+                       f"| {_fmt(s['mean_completion_tokens'], digits=0)} "
+                       f"| {s['truncated']} | {_fmt(s['mean_tok_s'])} |")
     out.append("")
+    if agentic:
+        out.append("<sub>*Valid calls* = tool calls that did not error. *Turn-limit* = runs "
+                   "abandoned after exhausting the turn budget without finishing.</sub>\n")
 
     # --- charts ---
     out.append(_chart("pass@1 (%)", "pass@1 %", short,
                       [s["pass_at_1"] * 100 for s in S], y_max=100))
     out.append(_chart("Cost of that accuracy — suite wall-clock (s)", "seconds", short,
                       [s["wall_seconds"] for s in S]))
-    out.append(_chart("Mean output tokens per answer", "tokens", short,
-                      [s["mean_completion_tokens"] or 0 for s in S]))
+    if agentic:
+        out.append(_chart("Mean tool calls per task", "calls", short,
+                          [s["mean_tool_calls"] or 0 for s in S]))
+        out.append(_chart("Valid tool-call rate (%)", "%", short,
+                          [(s["valid_call_rate"] or 0) * 100 for s in S], y_max=100))
+    else:
+        out.append(_chart("Mean output tokens per answer", "tokens", short,
+                          [s["mean_completion_tokens"] or 0 for s in S]))
 
     # --- accuracy by difficulty, one line per run ---
     diffs = ["easy", "medium", "hard"]
@@ -137,8 +158,14 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
                "not signal.")
     out.append("- Single-turn Python code generation only. Multi-turn agentic tool use is not "
                "exercised here.")
-    out.append("- A truncated generation counts as a failure; a high `Truncated` column means "
-               "runaway reasoning, which hangs real agents.")
+    if agentic:
+        out.append("- Success is decided by a predicate over the final workspace, never by what "
+                   "the model claims. Every task's oracle is verified to solve it first.")
+        out.append("- A task abandoned at the turn limit counts as failed; raise `--max-turns` "
+                   "before concluding the model cannot do it.")
+    else:
+        out.append("- A truncated generation counts as a failure; a high `Truncated` column means "
+                   "runaway reasoning, which hangs real agents.")
     out.append("\n## Raw data\n")
     for r, l in zip(runs, labels):
         out.append(f"- `{r['_path']}` — {l}")

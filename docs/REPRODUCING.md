@@ -46,13 +46,14 @@ Useful flags:
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--suite` | `all` | `core16`, `hard12`, or `all` — see `./bench suites -v` |
+| `--suite` | `all` | `core16`, `hard12`, `all`, or `agentic` — see `./bench suites -v` |
 | `--thinking` | off | Enables the model's reasoning block via `chat_template_kwargs` |
 | `--max-tokens` | 6000 | Raise to ~16000 with `--thinking`, or reasoning eats the budget |
 | `--samples` | 2 | Generations per task. 2 is cheap; 5+ before trusting small gaps |
 | `--concurrency` | 4 | Parallel in-flight requests |
 | `--test-timeout` | 60 | Seconds a generated program may run before counting as failed |
 | `--keep-code` | off | Store every generated program in the result file, for post-mortems |
+| `--max-turns` | 25 | `agentic` only: tool-calling turns before a task is abandoned |
 
 **Always run both thinking modes.** Reasoning-trained models collapse without their
 thinking block and non-reasoning models waste thousands of tokens with it; one mode
@@ -105,6 +106,43 @@ server other people are using.
   the next one.
 - **Scope.** These are single-turn Python code-generation tasks. They predict very little
   about multi-turn agentic tool use, long-context retrieval, or non-Python work.
+
+## The agentic suite
+
+`--suite agentic` is a different shape of test: instead of one prompt and one answer, the
+model is given seven tools — `list_files`, `read_file`, `write_file`, `edit_file`,
+`search`, `run_python`, `finish` — and a sandboxed in-memory workspace, and has to reach a
+goal state.
+
+```bash
+./bench validate --suite agentic          # 8/8 oracles solve their task
+./bench run --suite agentic --samples 2 --label "my-model agentic"
+```
+
+A task is solved when a predicate over the **final workspace** says so — never because the
+model announced success. Alongside solve rate the runner reports tool hygiene:
+
+| Metric | Why it matters |
+|---|---|
+| `mean_turns` / `mean_tool_calls` | Two models that both solve a task are not equal if one needs three times the calls |
+| `valid_call_rate` | Tool calls that did not error |
+| `malformed_args` | Arguments that were not a valid JSON object — a broken tool-calling implementation |
+| `unknown_tools` | Calls to tools that do not exist — hallucinated capability |
+| `hit_turn_limit` | Runs abandoned without finishing: the flailing failure mode |
+| `stalled_no_tool_call` | The model replied in prose instead of calling a tool |
+
+Your server must support OpenAI-style function calling (`tools` + `tool_choice`). On vLLM
+that means `--enable-auto-tool-choice` and a `--tool-call-parser` matching the model.
+
+Writing an agentic task needs three things: `files` (the initial workspace), `check(ws)`
+returning `(ok, detail)`, and `oracle(ws)` — a scripted sequence of tool calls that solves
+it. The oracle is the equivalent of a reference solution: `bench validate` runs it and
+confirms `check` then passes, so a failing task is provably the model's fault.
+
+**Make `check` strict about the whole final state.** `verify_no_change_needed` fails a
+model that edits already-correct code, and `rename_across_files` fails one that leaves the
+old symbol behind even if the tests pass. Predicates that only run the tests reward
+plausible-looking work.
 
 ## Adding tasks and suites
 

@@ -10,9 +10,18 @@ sys.path.insert(0, HERE)
 
 from benchkit import runner, report  # noqa: E402
 from benchkit.references import REFERENCES  # noqa: E402
-from benchkit.suites import SUITES, DESCRIPTIONS, get  # noqa: E402
+from benchkit.suites import SUITES, DESCRIPTIONS, get, kind  # noqa: E402
 
 RESULTS = os.path.join(HERE, "results")
+
+
+def _print_agentic(r):
+    mark = "PASS" if r["passed"] else "FAIL"
+    print(f"  {mark}  {r['task']:<24} s{r['sample']} "
+          f"{r['turns']:>3} turns {r['tool_calls']:>3} calls "
+          f"({r['failed_calls']} failed) {r['stop_reason']:<12} "
+          f"{r['completion_tokens']:>6}tok {r['elapsed']:6.1f}s"
+          + (f"   <{str(r.get('error'))[:60]}>" if not r["passed"] else ""), flush=True)
 
 
 def _print_result(r):
@@ -35,6 +44,9 @@ def cmd_suites(args):
 def cmd_validate(args):
     """Prove every task's hidden tests pass against a reference solution."""
     tasks = get(args.suite)
+    if kind(args.suite) == "agentic":
+        from benchkit.agentic.loop import validate
+        return 1 if validate(tasks) else 0
     bad = 0
     for t in tasks:
         code = REFERENCES.get(t["id"])
@@ -63,7 +75,13 @@ def cmd_run(args):
     print(f"suite={args.suite} ({len(tasks)} tasks)  {cfg.label}\n"
           f"endpoint={cfg.base_url}  samples={cfg.samples}  concurrency={cfg.concurrency}\n",
           flush=True)
-    summary, results = runner.run(tasks, cfg, on_result=_print_result, keep_code=args.keep_code)
+    if kind(args.suite) == "agentic":
+        from benchkit.agentic import loop
+        summary, results = loop.run(tasks, cfg, on_result=_print_agentic,
+                                    max_turns=args.max_turns)
+    else:
+        summary, results = runner.run(tasks, cfg, on_result=_print_result,
+                                      keep_code=args.keep_code)
 
     out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -77,6 +95,11 @@ def cmd_run(args):
     print(f"wall                   {summary['wall_seconds']:.0f} s")
     print(f"mean output tokens     {summary['mean_completion_tokens'] or 0:.0f}")
     print(f"truncated / errored    {summary['truncated']} / {summary['errored']}")
+    if summary.get("kind") == "agentic":
+        print(f"mean turns / calls     {summary['mean_turns']:.1f} / {summary['mean_tool_calls']:.1f}")
+        print(f"valid tool-call rate   {(summary['valid_call_rate'] or 0) * 100:.1f} %")
+        print(f"malformed / unknown    {summary['malformed_args']} / {summary['unknown_tools']}")
+        print(f"turn-limit / stalled   {summary['hit_turn_limit']} / {summary['stalled_no_tool_call']}")
     print("=" * 64)
     print(f"\nwritten to {out}")
     return 0
@@ -199,6 +222,8 @@ def main(argv=None):
     s.add_argument("--label", default="", help="human name for this run, used in the report")
     s.add_argument("--out", help="result json path (default: results/<date>/<label>.json)")
     s.add_argument("--keep-code", action="store_true", help="store each generated program")
+    s.add_argument("--max-turns", type=int, default=25,
+                   help="agentic suite: tool-calling turns before the task is abandoned")
     s.set_defaults(func=cmd_run)
 
     s = sub.add_parser("report", help="build a Markdown report from result files")
