@@ -231,7 +231,7 @@ class ClaudeCodeHarness(Harness):
         res = parse_events(p.stdout)
         if p.returncode != 0 and not res.error:
             res.stop_reason = "error"
-            tail = [l for l in (p.stderr or "").strip().splitlines() if l.strip()]
+            tail = [line for line in (p.stderr or "").strip().splitlines() if line.strip()]
             res.error = tail[-1][:200] if tail else f"exit {p.returncode}"
         return res
 
