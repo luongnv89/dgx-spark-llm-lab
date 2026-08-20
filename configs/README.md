@@ -24,8 +24,8 @@ points, not gospel.
 
 | Config | Model | Quant | VRAM budget | Measured | Use it when |
 |---|---|---|---|---|---|
-| `qwen3.6-35b-a3b-nvfp4` | Qwen3.6-35B-A3B | NVFP4 | 0.62 (~74 GB) | **82.1 % pass@1**, 47.8 tok/s | **Default.** Best accuracy/latency mix for coding agents |
-| `ornith-1.5-35b-a3b-nvfp4` | Ornith-1.5-35B-A3B | NVFP4 | 0.62 (~74 GB) | 80.4 % pass@1, 38.9 tok/s | You want fewer output tokens per answer and can tolerate more runaway reasoning |
+| `qwen3.6-35b-a3b-nvfp4` | Qwen3.6-35B-A3B | NVFP4 | 0.62 (~74 GB) | **82.1 % pass@1**, **100 % agentic**, 47.8 tok/s | **Current winner.** Best accuracy/latency mix for coding agents |
+| `ornith-1.5-35b-a3b-nvfp4` | Ornith-1.5-35B-A3B | NVFP4 | 0.62 (~74 GB) | 80.4 % pass@1, 38.9 tok/s | Runner-up. Fewer output tokens per answer, but it collapses without its reasoning block |
 | `qwen3.8-27b-nvfp4-dspark` | Qwen3.8-27B (dense) | NVFP4 | 0.70 | 96.9 % on core16 only | Dense-model comparison; much slower TTFT for agent loops |
 | `qwen3.8-27b-nvfp4-tunable` | Qwen3.8-27B (dense) | NVFP4 | env-tunable | — | Sweeping speculative-decoding settings (`K`, `DRAFTER`, `SPEC`) |
 | `gemma4-12b-w4a16` | Gemma 4 12B | QAT W4A16 | 0.16 | — | Small secondary backend alongside the primary, on port 8802 |
@@ -46,8 +46,13 @@ Where a cell is blank, that config has not been put through the coding suite.
   memory. Two backends must sum to well under 1.0.
 - **Draft slots come out of the batch token budget.** `k * max_num_seqs` above
   `--max-num-batched-tokens` makes the scheduler's token count negative at startup.
-- **Thinking defaults matter more than any flag.** See the campaign reports: for coding
-  agents, `enable_thinking: false` is the single biggest win.
+- **Thinking defaults matter more than any flag, and the right default depends on the
+  workload.** For one-shot code generation `enable_thinking: false` is the single biggest
+  win; for multi-turn tool loops thinking is free and cuts turns by a quarter. See the
+  campaign reports.
+- **Tool calling needs its own flags.** `--enable-auto-tool-choice` plus a
+  `--tool-call-parser` that matches the model's template, or the `agentic` suite scores
+  zero for reasons that have nothing to do with the model.
 
 ## Adding your own
 
