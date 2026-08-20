@@ -27,8 +27,9 @@ serve, not a number you quote:
   wins by thinking for 16k tokens has not won.
 - **Two workload shapes.** One-shot code generation *and* multi-turn agentic tool calling,
   because they disagree.
-- **Your harness, not ours.** The same model scores 10 points apart through two different
-  tool loops, so the suites also run through the coding agent you actually use.
+- **Your harness, not ours.** The same model scores 12 points apart through three different
+  tool loops, so the suites also run through the coding agent you actually use (`pi`,
+  `opencode`).
 - **The winner is installable.** `./bench apply <config> --restart` and you're serving it.
 - **Nothing scored on vibes.** Hidden executable unit tests and workspace predicates, each
   proven passable by a reference solution before any model is judged.
@@ -98,7 +99,7 @@ program runs in a subprocess. It passes or it does not.
 | `./bench validate` | Prove every task's hidden tests are passable |
 | `./bench run` | Run a suite against an endpoint, write a result JSON |
 | `./bench report *.json` | Build a Markdown report with mermaid charts |
-| `./bench harness list` | Which coding harnesses on this machine can be benchmarked |
+| `./bench harness list` | Which coding harnesses on this machine can be benchmarked (`pi`, `opencode`) |
 | `./bench harness run --harness pi` | Run a suite through a real harness instead of our tool loop |
 | `./bench configs` | List known-good serving configs |
 | `./bench apply <name> [--restart]` | Install one as your live server config |
@@ -145,8 +146,8 @@ computed). Architecture, ports and rollback: [SERVING.md](SERVING.md).
 | [2026-08-20](results/2026-08-20-ornith-vs-qwen3.6/) | Should Ornith-1.5-35B-A3B replace Qwen3.6-35B-A3B? | **No.** Ties at its best config, −20 points at the config we deploy |
 | [2026-08-20](results/2026-08-20-agentic-baseline/) | Can the winner drive a tool loop, and does thinking help there? | **Yes**, 16/16 in both modes — the suite is a floor, not a ranking. Thinking cuts turns 6.8 → 5.2 at no accuracy cost |
 | [2026-08-20](results/2026-08-20-agentic-hard/) | Can a harder agentic suite separate configs that both look perfect? | **Yes**, 54.6 vs 50.1. Solve rate still nearly ties; efficiency against oracle par is what separates them |
-| [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 through our loop, 77.4 through `pi` — at ~91k input tokens per task |
-| [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes, and it inverts.** `pi` solves fewer (87.5 % vs 93.8 %) but uses a third fewer calls: 55.0 against 44.9 |
+| [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 through our loop, 77.4 through `pi`, 79.3 through `opencode` |
+| [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `opencode` 60.3, `pi` 55.0, our loop 44.9 — and efficiency is bought with prefill: ~179k vs ~119k input tokens per task |
 
 The recurring lesson: **always benchmark both thinking modes, on the workload you actually
 run.** Reasoning-trained models collapse without their thinking block; non-reasoning models

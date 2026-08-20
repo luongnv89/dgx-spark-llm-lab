@@ -1,8 +1,8 @@
-# Harness comparison on the ranking suite — pi vs benchkit's tool loop
+# Three harnesses on the ranking suite
 
 **Question.** On tasks that can still be failed, does the harness change the ranking?
 
-**Verdict.** Yes, and it inverts: pi solves fewer tasks (87.5 % vs 93.8 %) but uses a third fewer tool calls, scoring 55.0 against 44.9.
+**Verdict.** Yes. opencode 60.3, pi 55.0, benchkit's own loop 44.9 — and only the three-way view separates pi's efficiency from the fact that it solved less to get there.
 
 ## Setup
 
@@ -19,48 +19,49 @@
 | Run | Agent score | Solved | Efficiency | Mean calls | Par | Valid calls | Turn-limit | Wall |
 |---|---|---|---|---|---|---|---|---|
 | benchkit loop + Qwen3.6 think-OFF | 44.9 | 93.8 % | 47.9 % | 13.7 | 5.9 | 96.3 % | 0 | 166 s |
-| **pi harness + Qwen3.6 think-OFF** | **55.0** | 87.5 % | 62.9 % | 9.9 | 5.9 | 92.4 % | 0 | 381 s |
+| pi harness + Qwen3.6 think-OFF | 55.0 | 87.5 % | 62.9 % | 9.9 | 5.9 | 92.4 % | 0 | 381 s |
+| **opencode + Qwen3.6 think-OFF** | **60.3** | 93.8 % | 64.3 % | 10.1 | 5.9 | 98.1 % | 0 | 521 s |
 
 <sub>**Agent score** = solve rate x efficiency, out of 100 — solving is the price of entry, efficiency breaks the ties solve rate cannot. *Efficiency* = par tool calls / calls actually used, capped at 1 and counted only on solved tasks. *Par* is measured by running each task's oracle, so it does not depend on the model. *Valid calls* = calls that did not error. *Turn-limit* = runs abandoned without finishing.</sub>
 
 ```mermaid
 xychart-beta
     title "Solve rate (%)"
-    x-axis ["montimage-dg OFF", "pi OFF"]
+    x-axis ["montimage-dg OFF", "pi OFF", "opencode OFF"]
     y-axis "solved %" 0 --> 100
-    bar [93.75, 87.5]
+    bar [93.75, 87.5, 93.75]
 ```
 
 ```mermaid
 xychart-beta
     title "Cost of that accuracy — suite wall-clock (s)"
-    x-axis ["montimage-dg OFF", "pi OFF"]
-    y-axis "seconds" 0 --> 437.7
-    bar [165.9, 380.6]
+    x-axis ["montimage-dg OFF", "pi OFF", "opencode OFF"]
+    y-axis "seconds" 0 --> 598.7
+    bar [165.9, 380.6, 520.6]
 ```
 
 ```mermaid
 xychart-beta
     title "Agent score (solve x efficiency, out of 100)"
-    x-axis ["montimage-dg OFF", "pi OFF"]
+    x-axis ["montimage-dg OFF", "pi OFF", "opencode OFF"]
     y-axis "score" 0 --> 100
-    bar [44.91, 55.02]
+    bar [44.91, 55.02, 60.27]
 ```
 
 ```mermaid
 xychart-beta
     title "Mean tool calls per task (par is the floor)"
-    x-axis ["montimage-dg OFF", "pi OFF"]
+    x-axis ["montimage-dg OFF", "pi OFF", "opencode OFF"]
     y-axis "calls" 0 --> 15.74
-    bar [13.69, 9.875]
+    bar [13.69, 9.875, 10.12]
 ```
 
 ```mermaid
 xychart-beta
     title "Valid tool-call rate (%)"
-    x-axis ["montimage-dg OFF", "pi OFF"]
+    x-axis ["montimage-dg OFF", "pi OFF", "opencode OFF"]
     y-axis "%" 0 --> 100
-    bar [96.35, 92.41]
+    bar [96.35, 92.41, 98.15]
 ```
 
 ```mermaid
@@ -70,49 +71,55 @@ xychart-beta
     y-axis "pass@1 %" 0 --> 100
     line [0, 0, 93.75]
     line [0, 0, 87.5]
+    line [0, 0, 93.75]
 ```
 
-<sub>Line 1 = benchkit loop + Qwen3.6 think-OFF · Line 2 = pi harness + Qwen3.6 think-OFF</sub>
+<sub>Line 1 = benchkit loop + Qwen3.6 think-OFF · Line 2 = pi harness + Qwen3.6 think-OFF · Line 3 = opencode + Qwen3.6 think-OFF</sub>
 
-## Where they disagree — benchkit loop + Qwen3.6 think-OFF vs pi harness + Qwen3.6 think-OFF
+## Where they disagree — benchkit loop + Qwen3.6 think-OFF vs opencode + Qwen3.6 think-OFF
 
-| Task | benchkit loop + Qwen3.6 think-OFF | pi harness + Qwen3.6 think-OFF | Winner |
+| Task | benchkit loop + Qwen3.6 think-OFF | opencode + Qwen3.6 think-OFF | Winner |
 |---|---|---|---|
+| `generalise_migration` | 50 % | 100 % | opencode + Qwen3.6 think-OFF |
 | `hidden_spec_compliance` | 100 % | 50 % | benchkit loop + Qwen3.6 think-OFF |
 
 ## Reading the numbers
 
-**pi solves less and still scores higher, which is the metric working as designed — and worth
-arguing with.** 87.5 % solved against 93.8 %, but 9.9 tool calls against 13.7 for a par of
-5.9. The agent score weights efficiency enough that a lost solve is outweighed by a third
-fewer calls. If you care only about whether the job gets done, read the Solved column and
-ignore the score; the composite exists because on the base suite both columns read 100 % and
-nothing could be ranked at all.
+**Three harnesses, one model, one machine — and they rank differently on both suites.**
+opencode leads (79.3 base, 60.3 ranking), pi is close behind, and benchkit's own tool loop is
+last by a wide margin. Nothing about the model changed between these rows. Any score reported
+without naming the harness is really a statement about that harness.
 
-**The efficiency gap is the same one the base suite showed, and it is structural.** pi's
-`edit` and `bash` do more per call than benchkit's `edit_file` and `run_python`, so identical
-work costs fewer round trips. On the ranking suite that is 9.9 calls against 13.7; on the base
-suite it was 6.0 against 7.3. This is a property of the harness, not of the model, and it is
-the single clearest argument for benchmarking through the harness you actually run.
+**opencode wins the ranking suite without giving anything up.** It matches benchkit's solve
+rate (93.8 %) while using 10.1 tool calls against 13.7, and it does not pay pi's cost of
+solving less: pi's higher efficiency on that suite came with 87.5 % solved. That is the one
+place the three-way comparison is more informative than the two-way — it separates "efficient
+because it is good" from "efficient because it gave up earlier".
 
-**pi pays ~119 000 input tokens per task for it.** Against ~1 300 output tokens. Whatever the
-harness saves in round trips it spends in prefill, and on a metered endpoint that is the whole
-bill. benchkit's own loop does not report input tokens at all — a blind spot this comparison
-exists to expose, not a sign that it is cheaper.
+**Efficiency is bought with prefill, and the ordering is exactly inverted.** Input tokens per
+task: benchkit's loop does not even measure them, pi spends ~119k, opencode ~179k on the same
+suite. The harness that needs the fewest round trips sends the most context per round. On a
+local endpoint that trades network turns for prefill compute; on a metered API it is the whole
+bill. Read the score and the token column together or the conclusion is wrong.
 
-**Both configurations failed `generalise_migration`.** The rule that duplicate names merge is
-stated in FORMAT.md and absent from the sample export, so a model that infers the format from
-the example rather than reading the spec produces per-row output that looks right. That task
-is currently the suite's best discriminator; `hidden_spec_compliance` is second, and caught pi
-on the `0033` prefix.
+**Both external harnesses converge on ~7 turns where our loop takes ~9.7.** pi and opencode
+have coarser tools — an `edit` that takes a whole replacement, a `bash` that can chain
+commands — so identical work costs fewer round trips. This is a property of the harness, not
+of the model, and it is the clearest argument for benchmarking through the one you actually
+run.
 
-**A flaky test was found and fixed while running this.** `perf_budget` originally asserted an
-absolute wall-clock limit, which failed a correct implementation at 2.6s against a 2.0s cap
-purely because the machine was loaded. It now compares scaling between two input sizes —
-quadratic work grows ~16x when n quadruples, linear work ~4x — which is load-independent.
-Fixing it exposed a second bug: the original input drew from a fixed value range, so the naive
-scan was O(n x distinct), linear in n, and passed. The value range now scales with n. Numbers
-measured before that fix were discarded rather than published.
+**Three adapter bugs, all found by running it rather than reading it.** pi blocked forever on
+an inherited stdin, so every task timed out at zero turns. opencode's project-config discovery
+found the provider when the identical argv went through a shell and not when it was exec'd
+directly, failing as `ProviderModelNotFoundError` a second into every task; passing
+`OPENCODE_CONFIG` explicitly fixed that but moved opencode's project root to the config's
+directory, after which the model reported it could not find the task files — `--dir` puts it
+back. None of this is visible without a live run.
+
+**A scoring hazard was fixed alongside.** While opencode was failing at launch it "passed"
+`verify_no_change_needed`, whose predicate is satisfied by the source being untouched. A
+harness that does nothing now fails every task by construction: a run that never started
+cannot have solved anything.
 
 ## Caveats
 
@@ -125,3 +132,4 @@ measured before that fix were discarded rather than published.
 
 - `hard-benchkit-loop.json` — benchkit loop + Qwen3.6 think-OFF
 - `hard-pi.json` — pi harness + Qwen3.6 think-OFF
+- `hard-opencode.json` — opencode + Qwen3.6 think-OFF
