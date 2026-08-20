@@ -22,7 +22,7 @@ So the next step is to run the same tasks through the harness sitting on the use
 
 | Harness | Integration route | Status |
 |---|---|---|
-| **pi** | `pi -p --mode json`, events folded into the standard result shape | **done** — [adapter](benchkit/harness/pi.py), [report](results/2026-08-20-pi-harness/REPORT.md) |
+| **pi** | `pi -p --mode json`, events folded into the standard result shape | **done** — [adapter](benchkit/harness/pi.py), reports on the [base](results/2026-08-20-pi-harness/REPORT.md) and [ranking](results/2026-08-20-pi-harness/REPORT-hard.md) suites |
 | **opencode** | Model provider config + headless run per task | planned |
 | **Claude Code** | Custom provider via `ANTHROPIC_BASE_URL`; headless `-p` runs, tool use through its own harness | planned |
 | **Codex** | CLI with a custom OpenAI-compatible base URL | planned |
@@ -31,9 +31,16 @@ The adapter interface, the real-directory execution backend and per-harness toke
 accounting all landed with the pi adapter — see [docs/HARNESSES.md](docs/HARNESSES.md).
 Adding a harness is now three methods: `available()`, `describe()`, `run()`.
 
-The first result already justifies the exercise: the same model on the same tasks scores
-67.4 through benchkit's own loop and 77.4 through pi, entirely on efficiency, while pi
-spends ~91k input tokens per task that our loop never reported at all.
+The first results already justify the exercise. On the base suite the same model on the same
+tasks scores 67.4 through benchkit's own loop and 77.4 through pi, entirely on efficiency.
+On the ranking suite it inverts: pi solves *fewer* tasks (87.5 % against 93.8 %) while using a
+third fewer tool calls, for 55.0 against 44.9. Either way pi spends ~119k input tokens per
+task that our own loop never reported at all.
+
+That inversion is also the clearest open question about the agent score: it weights efficiency
+enough that a lost solve can be outweighed. Reporting solve rate and efficiency as separate
+columns alongside it is the current answer; a better composite may be needed once more
+harnesses are in.
 
 Still open for the remaining adapters:
 

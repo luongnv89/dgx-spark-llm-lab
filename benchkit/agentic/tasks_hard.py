@@ -352,18 +352,37 @@ assert u([{"a": 1}, {"a": 1}, {"b": 2}]) == [{"a": 1}, {"b": 2}]
 assert u([1, "1", 1.0, True]) == [1, "1"], "1, 1.0 and True are equal values"
 
 random.seed(11)
-big = [random.randint(0, 5000) for _ in range(120000)]
-t0 = time.time()
-got = u(big)
-took = time.time() - t0
 
-seen, expected = set(), []
-for x in big:
-    if x not in seen:
-        seen.add(x)
-        expected.append(x)
-assert got == expected, "wrong result on the large input"
-assert took < 2.0, "took %.1fs on 120k items; must be sub-quadratic" % took
+
+def _timed(n):
+    # The value range scales with n, so the number of distinct elements does too.
+    # With a fixed range the naive scan is O(n * distinct) -- linear in n -- and
+    # the quadratic implementation slips through.
+    data = [random.randint(0, n) for _ in range(n)]
+    t0 = time.perf_counter()
+    got = u(data)
+    took = time.perf_counter() - t0
+    seen, expected = set(), []
+    for x in data:
+        if x not in seen:
+            seen.add(x)
+            expected.append(x)
+    assert got == expected, "wrong result on a %d-element input" % n
+    return took
+
+
+# Scaling, not wall-clock: an absolute time limit fails on a loaded machine and
+# passes on an idle one. Quadratic work grows ~16x when n quadruples; linear work
+# grows ~4x. The floor on the small measurement keeps timer noise out of the ratio.
+small = max(_timed(4000), 0.002)
+large = _timed(16000)
+ratio = large / small
+assert ratio < 8.0, ("scaled %.1fx when the input grew 4x (%.4fs -> %.4fs); "
+                     "that is quadratic, not linear" % (ratio, small, large))
+
+# Only a sub-quadratic implementation reaches this line quickly.
+big = _timed(200000)
+assert big < 10.0, "took %.1fs on 200k items even allowing for a loaded machine" % big
 print("OK")
 '''
 
