@@ -19,3 +19,11 @@ include = ["benchkit*"]
 
 [project.scripts]
 bench = "benchkit.cli:main"
+
+[tool.ruff]
+target-version = "py310"
+exclude = ["results/"]
+line-length = 100
+
+[tool.mypy]
+exclude = ["results/"]
