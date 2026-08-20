@@ -39,6 +39,13 @@ class Workspace:
     def snapshot(self):
         return dict(self.files)
 
+    def changed_lines(self, path):
+        """How many lines differ from the initial version of a file."""
+        import difflib
+        a = self.initial.get(path, "").splitlines()
+        b = self.files.get(path, "").splitlines()
+        return sum(1 for d in difflib.ndiff(a, b) if d[0] in "+-")
+
     # --- tools -----------------------------------------------------------
     def list_files(self, path="."):
         prefix = "" if path in (".", "", "/") else path.strip("/") + "/"
@@ -152,11 +159,16 @@ class Workspace:
                     touched.append(rel)
         return touched
 
-    def check(self, path):
-        """Run a file for scoring. Returns (exit_code, combined_output)."""
+    def check(self, path, extra_files=None):
+        """Run a file for scoring. Returns (exit_code, combined_output).
+
+        `extra_files` are written into the sandbox for this run only and are never
+        visible to the model — that is how a task is scored against the full spec
+        rather than against the asserts the model could read and special-case.
+        """
         d = tempfile.mkdtemp(prefix="benchkit-check-")
         try:
-            for p, body in self.files.items():
+            for p, body in dict(self.files, **(extra_files or {})).items():
                 full = os.path.join(d, p)
                 os.makedirs(os.path.dirname(full), exist_ok=True)
                 with open(full, "w") as f:

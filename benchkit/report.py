@@ -84,39 +84,48 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     out.append("## Results\n")
     best = max(range(len(S)), key=lambda i: S[i]["pass_at_1"])
     if agentic:
-        out.append("| Run | solved | easy | medium | hard | Mean turns | Mean calls "
+        out.append("| Run | Agent score | Solved | Efficiency | Mean calls | Par "
                    "| Valid calls | Turn-limit | Wall |\n"
-                   "|---|---|---|---|---|---|---|---|---|---|")
+                   "|---|---|---|---|---|---|---|---|---|")
     else:
         out.append("| Run | pass@1 | easy | medium | hard | Wall | Mean out tok "
                    "| Truncated | tok/s |\n|---|---|---|---|---|---|---|---|---|")
     for i, s in enumerate(S):
         d = s["by_difficulty"]
         name = f"**{labels[i]}**" if i == best else labels[i]
-        head = (f"| {name} | {_fmt(s['pass_at_1'], pct=True)} | {_fmt(d.get('easy'), pct=True)} "
-                f"| {_fmt(d.get('medium'), pct=True)} | {_fmt(d.get('hard'), pct=True)} ")
         if agentic:
-            out.append(head +
-                       f"| {_fmt(s['mean_turns'])} | {_fmt(s['mean_tool_calls'])} "
+            out.append(f"| {name} | **{s['agent_score'] * 100:.1f}** "
+                       f"| {_fmt(s['pass_at_1'], pct=True)} "
+                       f"| {_fmt(s['mean_efficiency'], pct=True)} "
+                       f"| {_fmt(s['mean_tool_calls'])} | {_fmt(s['mean_par_calls'])} "
                        f"| {_fmt(s['valid_call_rate'], pct=True)} | {s['hit_turn_limit']} "
                        f"| {_fmt(s['wall_seconds'], digits=0)} s |")
         else:
-            out.append(head +
+            out.append(f"| {name} | {_fmt(s['pass_at_1'], pct=True)} "
+                       f"| {_fmt(d.get('easy'), pct=True)} "
+                       f"| {_fmt(d.get('medium'), pct=True)} | {_fmt(d.get('hard'), pct=True)} " +
                        f"| {_fmt(s['wall_seconds'], digits=0)} s "
                        f"| {_fmt(s['mean_completion_tokens'], digits=0)} "
                        f"| {s['truncated']} | {_fmt(s['mean_tok_s'])} |")
     out.append("")
     if agentic:
-        out.append("<sub>*Valid calls* = tool calls that did not error. *Turn-limit* = runs "
-                   "abandoned after exhausting the turn budget without finishing.</sub>\n")
+        out.append("<sub>**Agent score** = solve rate x efficiency, out of 100 — solving is "
+                   "the price of entry, efficiency breaks the ties solve rate cannot. "
+                   "*Efficiency* = par tool calls / calls actually used, capped at 1 and "
+                   "counted only on solved tasks. *Par* is measured by running each task's "
+                   "oracle, so it does not depend on the model. *Valid calls* = calls that "
+                   "did not error. *Turn-limit* = runs abandoned without finishing.</sub>\n")
 
     # --- charts ---
-    out.append(_chart("pass@1 (%)", "pass@1 %", short,
+    out.append(_chart("Solve rate (%)" if agentic else "pass@1 (%)",
+                      "solved %" if agentic else "pass@1 %", short,
                       [s["pass_at_1"] * 100 for s in S], y_max=100))
     out.append(_chart("Cost of that accuracy — suite wall-clock (s)", "seconds", short,
                       [s["wall_seconds"] for s in S]))
     if agentic:
-        out.append(_chart("Mean tool calls per task", "calls", short,
+        out.append(_chart("Agent score (solve x efficiency, out of 100)", "score", short,
+                          [s["agent_score"] * 100 for s in S], y_max=100))
+        out.append(_chart("Mean tool calls per task (par is the floor)", "calls", short,
                           [s["mean_tool_calls"] or 0 for s in S]))
         out.append(_chart("Valid tool-call rate (%)", "%", short,
                           [(s["valid_call_rate"] or 0) * 100 for s in S], y_max=100))

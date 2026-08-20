@@ -51,7 +51,7 @@ Useful flags:
 
 | Flag | Default | Notes |
 |---|---|---|
-| `--suite` | `all` | `core16`, `hard12`, `all`, or `agentic` — see `./bench suites -v` |
+| `--suite` | `all` | `core16`, `hard12`, `all`, `agentic`, `agentic-hard`, `agentic-all` — see `./bench suites -v` |
 | `--thinking` | off | Enables the model's reasoning block via `chat_template_kwargs` |
 | `--max-tokens` | 6000 | Raise to ~16000 with `--thinking`, or reasoning eats the budget |
 | `--samples` | 2 | Generations per task. 2 is cheap; 5+ before trusting small gaps |
@@ -111,6 +111,40 @@ server other people are using.
   the next one.
 - **Scope.** These are single-turn Python code-generation tasks. They predict very little
   about multi-turn agentic tool use, long-context retrieval, or non-Python work.
+
+## Ranking with `agentic-hard`
+
+`agentic` is a floor: a model that fails it has a real tool-calling problem, but passing
+proves only that it clears the bar. `agentic-hard` is built to rank, using levers the base
+suite does not have:
+
+| Lever | What it catches |
+|---|---|
+| **Hidden tests** | Scoring runs asserts the model never saw, so satisfying the visible ones does not pay |
+| **Decoys** | The obvious suspect is innocent; the task fails if you edit it |
+| **Cascades** | Fixing one bug reveals the next — one run/fix cycle is not enough |
+| **Restraint** | Some tasks are failed by changing anything, or by changing the wrong file |
+| **Generalisation** | The checked input is not the sample input |
+| **Budgets** | A correct but quadratic answer fails on time |
+
+It is scored on an **agent score**, out of 100:
+
+```
+agent_score = solve_rate x mean_efficiency
+efficiency  = par_tool_calls / calls_actually_used     (capped at 1, solved tasks only)
+```
+
+`par` is measured by running each task's oracle, so it depends on the task, not on the
+model, the prompt or the wall clock. Solving is the price of entry; efficiency breaks the
+ties that solve rate cannot — which matters because strong models tie at 100 % solved while
+still using twice the calls they need.
+
+```bash
+./bench run --suite agentic-hard --samples 2 --max-turns 30 --label "my-model"
+```
+
+If a model scores 100 on solve *and* near 100 on efficiency, this suite has stopped
+measuring too. Write the next one.
 
 ## The agentic suite
 

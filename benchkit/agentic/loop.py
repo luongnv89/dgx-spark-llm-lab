@@ -15,6 +15,26 @@ from .tools import TOOLS, SYSTEM
 
 MAX_TURNS = 25
 
+_PAR_CACHE = {}
+
+
+def par_calls(task):
+    """Minimum tool calls to solve the task, measured by running its oracle.
+
+    This is the suite's ruler for effort. Two models that both solve everything
+    are not equal, and par turns "how much flailing" into a number that does not
+    depend on the model, the prompt, or the wall clock.
+    """
+    tid = task["id"]
+    if tid not in _PAR_CACHE:
+        ws = Workspace(task["files"])
+        try:
+            task["oracle"](ws)
+            _PAR_CACHE[tid] = max(1, len(ws.calls))
+        except Exception:  # noqa: BLE001 — a broken oracle is caught by `bench validate`
+            _PAR_CACHE[tid] = None
+    return _PAR_CACHE[tid]
+
 
 def _args_of(tc):
     """Parse a tool call's arguments. Returns (args, malformed)."""
@@ -91,7 +111,13 @@ def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
         solved, detail = False, f"check raised {e!r}"
 
     total_calls = len(ws.calls)
+    par = par_calls(task)
+    # Efficiency only means something for a solved task: failing in three calls is
+    # not efficient. Capped at 1.0 so beating par cannot inflate a weak run.
+    efficiency = (min(1.0, par / total_calls) if (solved and par and total_calls) else
+                  (1.0 if solved and not total_calls else None))
     return dict(
+        par_calls=par, efficiency=efficiency,
         task=task["id"], difficulty=task["difficulty"], sample=sample,
         passed=bool(solved), error=error or ("" if solved else str(detail)[:200]),
         turns=turns, tool_calls=total_calls, failed_calls=ws.failed_calls,
@@ -137,9 +163,19 @@ def summarize(results, cfg, wall, n_tasks):
 
     total_calls = sum(r["tool_calls"] for r in results)
     total_failed = sum(r["failed_calls"] for r in results)
+    effs = [r["efficiency"] for r in results if r.get("efficiency") is not None]
+    mean_eff = sum(effs) / len(effs) if effs else None
+    solve = sum(1 for r in results if r["passed"]) / len(results) if results else 0.0
+    # Solving is the price of entry; efficiency breaks the ties that solve rate
+    # cannot. A model that solves everything in twice par scores 0.5, not 1.0.
+    agent_score = solve * (mean_eff if mean_eff is not None else 0.0)
     return dict(
         kind="agentic", config=asdict(cfg), tasks=n_tasks, generations=len(results),
-        pass_at_1=sum(1 for r in results if r["passed"]) / len(results) if results else 0.0,
+        pass_at_1=solve,
+        agent_score=agent_score,
+        mean_efficiency=mean_eff,
+        mean_par_calls=(sum(r["par_calls"] for r in results if r.get("par_calls"))
+                        / max(1, sum(1 for r in results if r.get("par_calls")))),
         pass_all_samples=sum(1 for v in by_task.values()
                              if all(r["passed"] for r in v)) / max(1, len(by_task)),
         pass_any_sample=sum(1 for v in by_task.values()

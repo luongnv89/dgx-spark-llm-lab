@@ -90,12 +90,17 @@ def cmd_run(args):
 
     print("\n" + "=" * 64)
     print(f"pass@1                 {summary['pass_at_1'] * 100:.1f} %")
-    print(f"by difficulty          " + "  ".join(
-        f"{k}={(v or 0) * 100:.1f}%" for k, v in summary["by_difficulty"].items()))
+    print("by difficulty          " + "  ".join(
+        f"{k}={v * 100:.1f}%" for k, v in summary["by_difficulty"].items() if v is not None))
     print(f"wall                   {summary['wall_seconds']:.0f} s")
     print(f"mean output tokens     {summary['mean_completion_tokens'] or 0:.0f}")
     print(f"truncated / errored    {summary['truncated']} / {summary['errored']}")
     if summary.get("kind") == "agentic":
+        print(f"agent score            {summary['agent_score'] * 100:.1f}   "
+              f"(solve {summary['pass_at_1'] * 100:.1f} % x efficiency "
+              f"{(summary['mean_efficiency'] or 0) * 100:.1f} %)")
+        print(f"mean calls vs par      {summary['mean_tool_calls']:.1f} vs "
+              f"{summary['mean_par_calls']:.1f}")
         print(f"mean turns / calls     {summary['mean_turns']:.1f} / {summary['mean_tool_calls']:.1f}")
         print(f"valid tool-call rate   {(summary['valid_call_rate'] or 0) * 100:.1f} %")
         print(f"malformed / unknown    {summary['malformed_args']} / {summary['unknown_tools']}")
