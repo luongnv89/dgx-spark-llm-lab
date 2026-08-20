@@ -1,0 +1,90 @@
+suite=both thinking=False max_tokens=6000
+endpoint=http://localhost:8001/v1 model=montimage-dgx-spark tasks=28 samples=2 concurrency=4
+
+Single-stream probe (warm, no concurrency)...
+  ttft=3.60s  gen=74tok  16.1 tok/s
+
+  PASS  two_sum            s1    85tok 4.4s 19.4tok/s
+  PASS  two_sum            s0    85tok 4.4s 19.2tok/s
+  PASS  roman              s0   164tok 7.1s 23.0tok/s
+  PASS  balanced           s0    95tok 4.5s 21.0tok/s
+  PASS  balanced           s1    97tok 4.7s 20.5tok/s
+  PASS  word_freq          s0    84tok 3.7s 22.6tok/s
+  FAIL  roman              s1   249tok 11.0s 22.7tok/s  <SyntaxError: unterminated string literal (detected at line 6)>
+  PASS  word_freq          s1    84tok 3.7s 22.9tok/s
+  PASS  lru_cache          s0   152tok 5.2s 29.4tok/s
+  PASS  merge_intervals    s1   117tok 3.4s 34.5tok/s
+  FAIL  merge_intervals    s0   130tok 5.0s 25.8tok/s  <ImportError: cannot import name 'list' from 'typing' (/home/montimage/>
+  PASS  lru_cache          s1   140tok 5.2s 27.2tok/s
+  PASS  edit_distance      s0   211tok 6.0s 35.1tok/s
+  PASS  flatten_json       s0   175tok 4.6s 37.9tok/s
+  PASS  edit_distance      s1   201tok 5.3s 38.1tok/s
+  PASS  flatten_json       s1   212tok 5.8s 36.4tok/s
+  PASS  retry_decorator    s0    99tok 2.8s 35.5tok/s
+  PASS  version_cmp        s0   140tok 3.7s 37.6tok/s
+  PASS  version_cmp        s1   148tok 4.2s 35.6tok/s
+  PASS  retry_decorator    s1   128tok 3.8s 34.1tok/s
+  PASS  sql_parse          s1   192tok 5.1s 37.4tok/s
+  PASS  topo_sort          s0   195tok 5.4s 36.0tok/s
+  PASS  topo_sort          s1   196tok 4.9s 39.9tok/s
+  FAIL  sql_parse          s0   255tok 7.0s 36.7tok/s  <AssertionError: {'columns': ['*'], 'table': 't where id = 5', 'where':>
+  FAIL  word_ladder        s0   203tok 5.3s 38.0tok/s  <AssertionError>
+  FAIL  word_ladder        s1   246tok 6.1s 40.1tok/s  <AssertionError>
+  PASS  diff_lines         s0   327tok 7.6s 43.0tok/s
+  PASS  diff_lines         s1   331tok 7.7s 43.2tok/s
+  PASS  rate_limiter       s0   153tok 3.9s 38.9tok/s
+  PASS  expr_eval          s0   656tok 16.6s 39.5tok/s
+  PASS  rate_limiter       s1   139tok 3.7s 37.7tok/s
+  PASS  expr_eval          s1   666tok 17.6s 37.9tok/s
+  PASS  regex_match        s1   201tok 5.2s 38.5tok/s
+  PASS  regex_match        s0   264tok 7.2s 36.5tok/s
+  PASS  weighted_intervals s0   229tok 6.5s 35.0tok/s
+  PASS  weighted_intervals s1   339tok 8.7s 39.0tok/s
+  PASS  topo_batches       s0   297tok 7.4s 39.9tok/s
+  PASS  topo_batches       s1   360tok 8.8s 40.7tok/s
+  FAIL  wrap_min_raggedness s0   539tok 13.4s 40.2tok/s  <NameError: name '_line_length' is not defined>
+  FAIL  unify              s0   500tok 12.4s 40.3tok/s  <NameError: name 'fun' is not defined>
+  FAIL  json5_parse        s1  1560tok 36.4s 42.9tok/s  <ValueError: Unexpected character: ]>
+  FAIL  wrap_min_raggedness s1  1197tok 29.3s 40.9tok/s  <TypeError: 'NoneType' object is not subscriptable>
+  FAIL  json5_parse        s0  1939tok 44.9s 43.2tok/s  <SyntaxError: f-string: single '}' is not allowed>
+  FAIL  unify              s1   405tok 10.2s 39.7tok/s  <RecursionError: maximum recursion depth exceeded>
+  FAIL  range_module       s0   549tok 13.3s 41.3tok/s  <TypeError: '<' not supported between instances of 'list' and 'tuple'>
+  FAIL  range_module       s1   459tok 11.9s 38.6tok/s  <ModuleNotFoundError: No module named 'sortedcontainers'>
+  FAIL  cron_next          s1   518tok 12.4s 41.7tok/s  <AssertionError>
+  FAIL  bigint_div         s0   364tok 9.0s 40.3tok/s  <SyntaxError: invalid syntax>
+  PASS  cron_next          s0   631tok 15.2s 41.6tok/s
+  FAIL  tx_dict            s0   357tok 8.5s 42.2tok/s  <AssertionError>
+  FAIL  tx_dict            s1   339tok 7.9s 43.1tok/s  <AttributeError: 'TxDict' object has no attribute 'begin'>
+  FAIL  running_median     s0   262tok 6.1s 43.1tok/s  <ModuleNotFoundError: No module named 'sortedcontainers'>
+  FAIL  sql_select         s0  1541tok 36.4s 42.4tok/s  <NameError: name '_eval_condition' is not defined>
+  FAIL  sql_select         s1  2734tok 54.8s 49.9tok/s  <ValueError: Expected column name>
+  FAIL  bigint_div         s1   704tok 17.6s 40.1tok/s  <TIMEOUT (60s)>
+  FAIL  running_median     s1  4016tok 69.2s 58.0tok/s  <AssertionError>
+
+============================================================
+                       model: montimage-dgx-spark
+                    endpoint: http://localhost:8001/v1
+                       suite: both
+                    thinking: False
+                  max_tokens: 6000
+                       tasks: 28
+                     samples: 2
+                 concurrency: 4
+                 generations: 56
+                   pass_at_1: 0.6071428571428571
+            pass_all_samples: 0.5357142857142857
+             pass_any_sample: 0.6785714285714286
+                wall_seconds: 195.59512471199923
+         single_stream_tok_s: 16.089247878969918
+          single_stream_ttft: 3.597243152998999
+      mean_completion_tokens: 476.05357142857144
+    median_completion_tokens: 249
+       mean_tok_s_concurrent: 36.53261288726518
+             aggregate_tok_s: 136.29685320252025
+                   mean_ttft: 0.6343143084285268
+                   truncated: 0
+                     by_task: {'balanced': 1.0, 'bigint_div': 0.0, 'cron_next': 0.5, 'diff_lines': 1.0, 'edit_distance': 1.0, 'expr_eval': 1.0, 'flatten_json': 1.0, 'json5_parse': 0.0, 'lru_cache': 1.0, 'merge_intervals': 0.5, 'range_module': 0.0, 'rate_limiter': 1.0, 'regex_match': 1.0, 'retry_decorator': 1.0, 'roman': 0.5, 'running_median': 0.0, 'sql_parse': 0.5, 'sql_select': 0.0, 'topo_batches': 1.0, 'topo_sort': 1.0, 'two_sum': 1.0, 'tx_dict': 0.0, 'unify': 0.0, 'version_cmp': 1.0, 'weighted_intervals': 1.0, 'word_freq': 1.0, 'word_ladder': 0.0, 'wrap_min_raggedness': 0.0}
+               by_difficulty: {'easy': 0.875, 'medium': 0.75, 'hard': 0.46875}
+============================================================
+
+written to results_ornith15.json

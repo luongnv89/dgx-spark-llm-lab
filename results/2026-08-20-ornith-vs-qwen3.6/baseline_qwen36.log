@@ -1,0 +1,90 @@
+suite=both thinking=False max_tokens=6000
+endpoint=http://localhost:8001/v1 model=montimage-dgx-spark tasks=28 samples=2 concurrency=4
+
+Single-stream probe (warm, no concurrency)...
+  ttft=1.20s  gen=70tok  36.4 tok/s
+
+  PASS  two_sum            s0    69tok 3.1s 22.1tok/s
+  PASS  two_sum            s1    70tok 3.1s 22.4tok/s
+  PASS  roman              s0   191tok 6.9s 27.5tok/s
+  PASS  balanced           s1   115tok 3.9s 29.5tok/s
+  PASS  balanced           s0   117tok 3.9s 29.9tok/s
+  PASS  roman              s1   201tok 7.2s 27.8tok/s
+  PASS  word_freq          s0   140tok 3.1s 45.6tok/s
+  PASS  word_freq          s1   140tok 3.0s 46.3tok/s
+  PASS  merge_intervals    s0   150tok 5.9s 25.4tok/s
+  PASS  merge_intervals    s1   167tok 8.4s 19.8tok/s
+  PASS  lru_cache          s0   500tok 15.9s 31.3tok/s
+  PASS  lru_cache          s1   514tok 16.1s 32.0tok/s
+  PASS  edit_distance      s0   386tok 10.5s 36.9tok/s
+  PASS  edit_distance      s1   386tok 8.2s 47.1tok/s
+  PASS  flatten_json       s0   265tok 5.3s 50.0tok/s
+  PASS  flatten_json       s1   386tok 10.4s 37.0tok/s
+  PASS  version_cmp        s1   230tok 7.1s 32.5tok/s
+  PASS  version_cmp        s0   241tok 7.4s 32.6tok/s
+  PASS  retry_decorator    s0   191tok 6.8s 28.2tok/s
+  PASS  retry_decorator    s1   103tok 2.4s 43.2tok/s
+  PASS  topo_sort          s0   280tok 5.4s 51.5tok/s
+  PASS  sql_parse          s0   375tok 7.8s 47.9tok/s
+  PASS  topo_sort          s1   360tok 8.4s 42.8tok/s
+  PASS  sql_parse          s1   528tok 13.1s 40.3tok/s
+  PASS  word_ladder        s0   247tok 6.6s 37.4tok/s
+  PASS  word_ladder        s1   224tok 6.3s 35.4tok/s
+  PASS  diff_lines         s0   416tok 8.8s 47.2tok/s
+  FAIL  diff_lines         s1   519tok 12.5s 41.6tok/s  <AssertionError>
+  PASS  rate_limiter       s0   221tok 6.5s 33.8tok/s
+  PASS  rate_limiter       s1   232tok 7.1s 32.5tok/s
+  PASS  expr_eval          s0   912tok 23.4s 38.9tok/s
+  PASS  expr_eval          s1  1153tok 29.9s 38.6tok/s
+  PASS  regex_match        s0   542tok 15.7s 34.5tok/s
+  PASS  regex_match        s1   484tok 14.8s 32.7tok/s
+  PASS  weighted_intervals s0   573tok 17.3s 33.2tok/s
+  PASS  weighted_intervals s1   670tok 18.2s 36.9tok/s
+  PASS  topo_batches       s0   566tok 14.7s 38.4tok/s
+  PASS  topo_batches       s1   522tok 16.7s 31.2tok/s
+  PASS  json5_parse        s0  2706tok 78.9s 34.3tok/s
+  PASS  json5_parse        s1  2701tok 77.2s 35.0tok/s
+  FAIL  wrap_min_raggedness s1  1370tok 48.1s 28.5tok/s  <AssertionError>
+  FAIL  wrap_min_raggedness s0  2184tok 76.9s 28.4tok/s  <ValueError: No valid packing found>
+  PASS  unify              s0  1144tok 36.5s 31.3tok/s
+  PASS  unify              s1  1259tok 40.3s 31.3tok/s
+  PASS  range_module       s1  1473tok 45.6s 32.3tok/s
+  PASS  range_module       s0  1951tok 66.2s 29.5tok/s
+  FAIL  cron_next          s0  1897tok 57.7s 32.9tok/s  <AttributeError: type object 'datetime.datetime' has no attribute 'date>
+  FAIL  cron_next          s1  1700tok 52.4s 32.4tok/s  <AssertionError>
+  FAIL  bigint_div         s1  1491tok 43.9s 33.9tok/s  <AssertionError>
+  FAIL  tx_dict            s0   694tok 21.9s 31.6tok/s  <AssertionError>
+  PASS  bigint_div         s0  1927tok 65.3s 29.5tok/s
+  FAIL  tx_dict            s1  1058tok 36.1s 29.3tok/s  <RuntimeError: Transaction already in progress>
+  PASS  running_median     s1  1291tok 40.3s 32.1tok/s
+  FAIL  running_median     s0  2011tok 66.6s 30.2tok/s  <AssertionError: remove missing should raise>
+  FAIL  sql_select         s0  3317tok 100.1s 33.2tok/s  <ValueError: Parse error: Expected STRING, got 28>
+  FAIL  sql_select         s1  4169tok 118.8s 35.1tok/s  <ValueError: Expected IDENT, got KEYWORD ('SELECT')>
+
+============================================================
+                       model: montimage-dgx-spark
+                    endpoint: http://localhost:8001/v1
+                       suite: both
+                    thinking: False
+                  max_tokens: 6000
+                       tasks: 28
+                     samples: 2
+                 concurrency: 4
+                 generations: 56
+                   pass_at_1: 0.8035714285714286
+            pass_all_samples: 0.75
+             pass_any_sample: 0.8571428571428571
+                wall_seconds: 392.43969073199696
+         single_stream_tok_s: 36.36983323535335
+          single_stream_ttft: 1.2028883879975183
+      mean_completion_tokens: 852.3035714285714
+    median_completion_tokens: 514
+       mean_tok_s_concurrent: 34.51097085820054
+             aggregate_tok_s: 121.62123538262306
+                   mean_ttft: 0.5003485918570212
+                   truncated: 0
+                     by_task: {'balanced': 1.0, 'bigint_div': 0.5, 'cron_next': 0.0, 'diff_lines': 0.5, 'edit_distance': 1.0, 'expr_eval': 1.0, 'flatten_json': 1.0, 'json5_parse': 1.0, 'lru_cache': 1.0, 'merge_intervals': 1.0, 'range_module': 1.0, 'rate_limiter': 1.0, 'regex_match': 1.0, 'retry_decorator': 1.0, 'roman': 1.0, 'running_median': 0.5, 'sql_parse': 1.0, 'sql_select': 0.0, 'topo_batches': 1.0, 'topo_sort': 1.0, 'two_sum': 1.0, 'tx_dict': 0.0, 'unify': 1.0, 'version_cmp': 1.0, 'weighted_intervals': 1.0, 'word_freq': 1.0, 'word_ladder': 1.0, 'wrap_min_raggedness': 0.0}
+               by_difficulty: {'easy': 1.0, 'medium': 0.9375, 'hard': 0.6875}
+============================================================
+
+written to results_qwen36_baseline.json

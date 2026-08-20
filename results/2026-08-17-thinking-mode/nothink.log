@@ -1,0 +1,44 @@
+re-run: thinking=False max_tokens=4000 tasks=['two_sum', 'roman', 'balanced', 'word_freq', 'lru_cache', 'merge_intervals', 'edit_distance', 'flatten_json', 'version_cmp', 'retry_decorator', 'sql_parse', 'topo_sort', 'word_ladder', 'expr_eval', 'diff_lines', 'rate_limiter']
+  PASS  two_sum            s0     74tok 3s 24.2tok/s
+  PASS  two_sum            s1     74tok 3s 22.9tok/s
+  PASS  word_freq          s1     91tok 3s 26.4tok/s
+  PASS  balanced           s0    104tok 5s 20.9tok/s
+  PASS  word_freq          s0    149tok 5s 28.9tok/s
+  PASS  balanced           s1    112tok 6s 20.0tok/s
+  PASS  roman              s1    174tok 7s 23.3tok/s
+  PASS  merge_intervals    s0    117tok 4s 29.3tok/s
+  PASS  roman              s0    199tok 9s 22.5tok/s
+  PASS  merge_intervals    s1    117tok 5s 25.5tok/s
+  PASS  lru_cache          s1    205tok 8s 26.8tok/s
+  PASS  edit_distance      s0    210tok 6s 34.3tok/s
+  PASS  edit_distance      s1    210tok 6s 34.6tok/s
+  PASS  version_cmp        s0    152tok 5s 30.0tok/s
+  PASS  flatten_json       s0    182tok 7s 26.6tok/s
+  PASS  lru_cache          s0    372tok 11s 32.6tok/s
+  PASS  retry_decorator    s0    100tok 4s 26.5tok/s
+  PASS  flatten_json       s1    216tok 7s 29.1tok/s
+  PASS  version_cmp        s1    153tok 5s 28.8tok/s
+  PASS  retry_decorator    s1    100tok 4s 24.6tok/s
+  PASS  word_ladder        s1    202tok 7s 28.5tok/s
+  PASS  sql_parse          s0    227tok 10s 22.1tok/s
+  PASS  word_ladder        s0    217tok 8s 27.4tok/s
+  PASS  topo_sort          s0    225tok 8s 27.1tok/s
+  PASS  topo_sort          s1    249tok 10s 25.3tok/s
+  PASS  sql_parse          s1    253tok 13s 19.9tok/s
+  PASS  rate_limiter       s0    153tok 6s 27.1tok/s
+  PASS  rate_limiter       s1    196tok 8s 25.0tok/s
+  PASS  diff_lines         s1    332tok 9s 35.9tok/s
+  PASS  expr_eval          s1    644tok 19s 34.5tok/s
+  PASS  diff_lines         s0    517tok 15s 34.2tok/s
+  FAIL  expr_eval          s0    894tok 27s 33.0tok/s  <[1;35mValueError[0m: [35mUnexpected token: 2.5[0m>
+
+{
+  "thinking": false,
+  "max_tokens": 4000,
+  "generations": 32,
+  "pass_at_1": 0.96875,
+  "pass_any": 1.0,
+  "truncated": 0,
+  "wall_seconds": 42.0614800080657,
+  "mean_completion_tokens": 225.625
+}

@@ -1,0 +1,90 @@
+suite=both thinking=True max_tokens=16000
+endpoint=http://localhost:8001/v1 model=montimage-dgx-spark tasks=28 samples=2 concurrency=4
+
+Single-stream probe (warm, no concurrency)...
+  ttft=0.80s  gen=102tok  53.3 tok/s
+
+  PASS  two_sum            s1    96tok 2.6s 36.4tok/s
+  PASS  two_sum            s0   100tok 3.3s 30.2tok/s
+  PASS  roman              s0   193tok 5.5s 35.2tok/s
+  PASS  balanced           s0   127tok 3.8s 33.4tok/s
+  PASS  balanced           s1   125tok 3.4s 37.2tok/s
+  PASS  roman              s1   244tok 6.7s 36.2tok/s
+  PASS  word_freq          s0   140tok 4.4s 31.6tok/s
+  PASS  lru_cache          s1   187tok 5.4s 34.9tok/s
+  PASS  word_freq          s1   203tok 6.1s 33.0tok/s
+  PASS  merge_intervals    s1   135tok 3.6s 37.1tok/s
+  PASS  merge_intervals    s0   209tok 6.2s 33.5tok/s
+  PASS  edit_distance      s0   189tok 5.5s 34.6tok/s
+  PASS  lru_cache          s0   547tok 14.9s 36.7tok/s
+  PASS  edit_distance      s1   226tok 6.1s 36.8tok/s
+  PASS  version_cmp        s1   177tok 4.1s 43.4tok/s
+  PASS  version_cmp        s0   215tok 5.5s 39.2tok/s
+  PASS  retry_decorator    s0   195tok 5.0s 38.8tok/s
+  PASS  retry_decorator    s1   168tok 4.5s 37.6tok/s
+  PASS  sql_parse          s0   324tok 8.2s 39.5tok/s
+  PASS  topo_sort          s0   325tok 7.8s 41.8tok/s
+  PASS  flatten_json       s1  1230tok 29.6s 41.6tok/s
+  PASS  flatten_json       s0  1400tok 35.4s 39.6tok/s
+  PASS  word_ladder        s0   358tok 8.6s 41.5tok/s
+  PASS  sql_parse          s1  1173tok 28.5s 41.2tok/s
+  PASS  topo_sort          s1   597tok 14.2s 42.1tok/s
+  PASS  word_ladder        s1   987tok 23.8s 41.4tok/s
+  PASS  diff_lines         s0   884tok 20.7s 42.8tok/s
+  PASS  expr_eval          s1  1543tok 36.7s 42.0tok/s
+  PASS  expr_eval          s0  1848tok 43.2s 42.8tok/s
+  PASS  diff_lines         s1  1128tok 27.8s 40.6tok/s
+  PASS  rate_limiter       s0   898tok 22.6s 39.7tok/s
+  FAIL  regex_match        s0   373tok 10.0s 37.3tok/s  <IndexError: string index out of range>
+  PASS  rate_limiter       s1   599tok 15.2s 39.5tok/s
+  PASS  regex_match        s1   547tok 13.9s 39.3tok/s
+  PASS  weighted_intervals s0   553tok 14.0s 39.5tok/s
+  PASS  weighted_intervals s1   359tok 9.3s 38.4tok/s
+  PASS  topo_batches       s0  2190tok 53.2s 41.2tok/s
+  PASS  topo_batches       s1  2903tok 67.9s 42.8tok/s
+  FAIL  json5_parse        s0  7015tok 168.9s 41.5tok/s  <ValueError: Expected object key>
+  PASS  json5_parse        s1  7604tok 183.1s 41.5tok/s
+  PASS  unify              s0  7218tok 185.2s 39.0tok/s
+  PASS  unify              s1  6533tok 168.5s 38.8tok/s
+  FAIL  wrap_min_raggedness s1 16000tok 393.9s 40.6tok/s  <NameError: name 'wrap_text' is not defined>
+  FAIL  wrap_min_raggedness s0 16000tok 411.3s 38.9tok/s  <NameError: name 'wrap_text' is not defined>
+  PASS  range_module       s0  6333tok 157.9s 40.1tok/s
+  PASS  range_module       s1  6459tok 166.0s 38.9tok/s
+  PASS  bigint_div         s0 12579tok 303.3s 41.5tok/s
+  FAIL  bigint_div         s1 13150tok 335.6s 39.2tok/s  <UnboundLocalError: cannot access local variable '_strip_lsb' where it >
+  FAIL  cron_next          s1 16000tok 413.6s 38.7tok/s  <NameError: name 'next_run' is not defined>
+  FAIL  cron_next          s0 16000tok 422.3s 37.9tok/s  <NameError: name 'next_run' is not defined>
+  PASS  tx_dict            s0  5047tok 125.1s 40.3tok/s
+  PASS  tx_dict            s1  5837tok 143.2s 40.7tok/s
+  FAIL  sql_select         s0 16000tok 405.4s 39.5tok/s  <SyntaxError: invalid syntax>
+  FAIL  sql_select         s1 16000tok 406.2s 39.4tok/s  <NameError: name 'run_query' is not defined>
+  FAIL  running_median     s0 16000tok 399.1s 40.1tok/s  <NameError: name 'MedianStream' is not defined>
+  FAIL  running_median     s1 16000tok 381.4s 41.9tok/s  <NameError: name 'MedianStream' is not defined>
+
+============================================================
+                       model: montimage-dgx-spark
+                    endpoint: http://localhost:8001/v1
+                       suite: both
+                    thinking: True
+                  max_tokens: 16000
+                       tasks: 28
+                     samples: 2
+                 concurrency: 4
+                 generations: 56
+                   pass_at_1: 0.8035714285714286
+            pass_all_samples: 0.75
+             pass_any_sample: 0.8571428571428571
+                wall_seconds: 1495.3411604739995
+         single_stream_tok_s: 53.28599425099503
+          single_stream_ttft: 0.8000791230006143
+      mean_completion_tokens: 4097.678571428572
+    median_completion_tokens: 898
+       mean_tok_s_concurrent: 38.91464603832479
+             aggregate_tok_s: 153.45661984403722
+                   mean_ttft: 52.15438843822437
+                   truncated: 8
+                     by_task: {'balanced': 1.0, 'bigint_div': 0.5, 'cron_next': 0.0, 'diff_lines': 1.0, 'edit_distance': 1.0, 'expr_eval': 1.0, 'flatten_json': 1.0, 'json5_parse': 0.5, 'lru_cache': 1.0, 'merge_intervals': 1.0, 'range_module': 1.0, 'rate_limiter': 1.0, 'regex_match': 0.5, 'retry_decorator': 1.0, 'roman': 1.0, 'running_median': 0.0, 'sql_parse': 1.0, 'sql_select': 0.0, 'topo_batches': 1.0, 'topo_sort': 1.0, 'two_sum': 1.0, 'tx_dict': 1.0, 'unify': 1.0, 'version_cmp': 1.0, 'weighted_intervals': 1.0, 'word_freq': 1.0, 'word_ladder': 1.0, 'wrap_min_raggedness': 0.0}
+               by_difficulty: {'easy': 1.0, 'medium': 0.875, 'hard': 0.71875}
+============================================================
+
+written to results_ornith15_think.json

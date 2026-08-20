@@ -1,0 +1,90 @@
+suite=both thinking=True max_tokens=16000
+endpoint=http://localhost:8001/v1 model=montimage-dgx-spark tasks=28 samples=2 concurrency=4
+
+Single-stream probe (warm, no concurrency)...
+  ttft=13.87s  gen=923tok  63.2 tok/s
+
+  PASS  two_sum            s1   804tok 19.1s 42.1tok/s
+  PASS  two_sum            s0   983tok 23.6s 41.6tok/s
+  PASS  roman              s1  1078tok 24.8s 43.4tok/s
+  PASS  roman              s0  1436tok 31.6s 45.5tok/s
+  PASS  balanced           s1  1192tok 24.5s 48.6tok/s
+  PASS  balanced           s0  1375tok 29.3s 46.9tok/s
+  PASS  word_freq          s1  1784tok 36.9s 48.3tok/s
+  PASS  word_freq          s0  2357tok 50.1s 47.0tok/s
+  PASS  lru_cache          s1  2932tok 59.0s 49.7tok/s
+  PASS  merge_intervals    s0  2034tok 42.9s 47.4tok/s
+  PASS  merge_intervals    s1  2096tok 43.7s 47.9tok/s
+  PASS  lru_cache          s0  3720tok 75.7s 49.2tok/s
+  PASS  edit_distance      s1  1819tok 36.1s 50.4tok/s
+  PASS  edit_distance      s0  2036tok 40.2s 50.6tok/s
+  PASS  version_cmp        s0  1850tok 37.5s 49.3tok/s
+  PASS  flatten_json       s0  3640tok 75.3s 48.3tok/s
+  PASS  flatten_json       s1  4173tok 86.2s 48.4tok/s
+  PASS  retry_decorator    s0  2038tok 42.5s 48.0tok/s
+  PASS  retry_decorator    s1  2106tok 44.8s 47.1tok/s
+  PASS  topo_sort          s0  4201tok 88.6s 47.4tok/s
+  PASS  sql_parse          s0  6007tok 131.0s 45.8tok/s
+  PASS  sql_parse          s1  8546tok 181.0s 47.2tok/s
+  PASS  topo_sort          s1  4949tok 104.7s 47.3tok/s
+  PASS  word_ladder        s0  4686tok 103.1s 45.4tok/s
+  FAIL  version_cmp        s1 16000tok 323.3s 49.5tok/s  <NameError: name 'compare_versions' is not defined>
+  PASS  word_ladder        s1  3922tok 83.1s 47.2tok/s
+  FAIL  diff_lines         s1  7287tok 154.4s 47.2tok/s  <AssertionError>
+  PASS  diff_lines         s0  8394tok 175.7s 47.8tok/s
+  PASS  expr_eval          s1 10117tok 209.9s 48.2tok/s
+  PASS  expr_eval          s0 11372tok 233.9s 48.6tok/s
+  PASS  rate_limiter       s1  3420tok 72.9s 46.9tok/s
+  PASS  rate_limiter       s0  3594tok 75.9s 47.3tok/s
+  PASS  regex_match        s0  4701tok 94.2s 49.9tok/s
+  PASS  regex_match        s1  6100tok 124.3s 49.1tok/s
+  PASS  weighted_intervals s1  4847tok 101.3s 47.8tok/s
+  PASS  weighted_intervals s0  5356tok 111.6s 48.0tok/s
+  PASS  topo_batches       s1  5278tok 111.2s 47.5tok/s
+  PASS  topo_batches       s0  6574tok 139.0s 47.3tok/s
+  PASS  json5_parse        s0 13278tok 272.2s 48.8tok/s
+  FAIL  json5_parse        s1 13098tok 269.0s 48.7tok/s  <ValueError: Expected ',' or '}' in object>
+  PASS  wrap_min_raggedness s0  9385tok 197.0s 47.6tok/s
+  PASS  wrap_min_raggedness s1 10928tok 230.7s 47.4tok/s
+  PASS  unify              s1  8134tok 167.7s 48.5tok/s
+  PASS  unify              s0 13360tok 283.6s 47.1tok/s
+  FAIL  range_module       s0 12660tok 270.0s 46.9tok/s  <TypeError: '<' not supported between instances of 'list' and 'tuple'>
+  FAIL  range_module       s1 11245tok 236.1s 47.6tok/s  <AssertionError>
+  FAIL  cron_next          s0 10618tok 227.5s 46.7tok/s  <OverflowError: date value out of range>
+  PASS  cron_next          s1 12055tok 250.1s 48.2tok/s
+  FAIL  bigint_div         s0  9746tok 204.0s 47.8tok/s  <AssertionError>
+  PASS  bigint_div         s1  9822tok 207.7s 47.3tok/s
+  PASS  tx_dict            s0  9313tok 194.5s 47.9tok/s
+  FAIL  tx_dict            s1 10273tok 215.7s 47.6tok/s  <AssertionError>
+  FAIL  sql_select         s0 14966tok 307.8s 48.6tok/s  <ValueError: Unexpected character: *>
+  FAIL  sql_select         s1 13848tok 286.8s 48.3tok/s  <IndexError: list index out of range>
+  PASS  running_median     s0 11716tok 246.7s 47.5tok/s
+  PASS  running_median     s1 12086tok 214.0s 56.5tok/s
+
+============================================================
+                       model: montimage-dgx-spark
+                    endpoint: http://localhost:8001/v1
+                       suite: both
+                    thinking: True
+                  max_tokens: 16000
+                       tasks: 28
+                     samples: 2
+                 concurrency: 4
+                 generations: 56
+                   pass_at_1: 0.8214285714285714
+            pass_all_samples: 0.7142857142857143
+             pass_any_sample: 0.9285714285714286
+                wall_seconds: 1984.5034266859984
+         single_stream_tok_s: 63.196511657719064
+          single_stream_ttft: 13.867710697999428
+      mean_completion_tokens: 6630.982142857143
+    median_completion_tokens: 5356
+       mean_tok_s_concurrent: 47.75113123789851
+             aggregate_tok_s: 187.1173387793576
+                   mean_ttft: 126.60017120318179
+                   truncated: 1
+                     by_task: {'balanced': 1.0, 'bigint_div': 0.5, 'cron_next': 0.5, 'diff_lines': 0.5, 'edit_distance': 1.0, 'expr_eval': 1.0, 'flatten_json': 1.0, 'json5_parse': 0.5, 'lru_cache': 1.0, 'merge_intervals': 1.0, 'range_module': 0.0, 'rate_limiter': 1.0, 'regex_match': 1.0, 'retry_decorator': 1.0, 'roman': 1.0, 'running_median': 1.0, 'sql_parse': 1.0, 'sql_select': 0.0, 'topo_batches': 1.0, 'topo_sort': 1.0, 'two_sum': 1.0, 'tx_dict': 0.5, 'unify': 1.0, 'version_cmp': 0.5, 'weighted_intervals': 1.0, 'word_freq': 1.0, 'word_ladder': 1.0, 'wrap_min_raggedness': 1.0}
+               by_difficulty: {'easy': 1.0, 'medium': 0.9375, 'hard': 0.71875}
+============================================================
+
+written to results_qwen36_think.json

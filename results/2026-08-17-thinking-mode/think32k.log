@@ -1,0 +1,26 @@
+re-run: thinking=True max_tokens=32000 tasks=['flatten_json', 'retry_decorator', 'sql_parse', 'topo_sort', 'word_ladder', 'expr_eval', 'diff_lines']
+  PASS  retry_decorator    s1   1110tok 65s 17.0tok/s
+  PASS  retry_decorator    s0   5469tok 316s 17.3tok/s
+  PASS  sql_parse          s1   7385tok 474s 15.6tok/s
+  PASS  topo_sort          s0   8108tok 517s 15.7tok/s
+  PASS  flatten_json       s0  12933tok 809s 16.0tok/s
+  PASS  word_ladder        s1   6269tok 398s 15.8tok/s
+  PASS  flatten_json       s1  14356tok 879s 16.3tok/s
+  PASS  word_ladder        s0  13704tok 981s 14.0tok/s
+  PASS  topo_sort          s1  21512tok 1353s 15.9tok/s
+  FAIL  sql_parse          s0  32000tok 1755s 18.2tok/s TRUNCATED  <[1;35mNameError[0m: [35mname 'parse_select' is not defined[0m>
+  FAIL  expr_eval          s0  32000tok 1291s 24.8tok/s TRUNCATED  <[1;35mNameError[0m: [35mname 'evaluate' is not defined[0m>
+  FAIL  expr_eval          s1  32000tok 1006s 31.8tok/s TRUNCATED  <[1;35mNameError[0m: [35mname 'evaluate' is not defined[0m>
+  PASS  diff_lines         s1  25377tok 1640s 15.5tok/s
+  PASS  diff_lines         s0  31791tok 1862s 17.1tok/s
+
+{
+  "thinking": true,
+  "max_tokens": 32000,
+  "generations": 14,
+  "pass_at_1": 0.7857142857142857,
+  "pass_any": 0.8571428571428571,
+  "truncated": 3,
+  "wall_seconds": 2733.9626168198884,
+  "mean_completion_tokens": 17429.571428571428
+}
