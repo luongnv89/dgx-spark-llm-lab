@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| Endpoint | `http://localhost:8001/v1` |
+| Endpoint | `http://localhost:8001` |
 | Tasks | 28 |
 | Samples per task | 2 (⇒ 56 generations per run) |
 | Concurrency | 4 |

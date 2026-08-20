@@ -71,37 +71,101 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
 
     # --- setup table ---
     cfg0 = S[0]["config"]
+
+    def _shared(values, fmt=str):
+        """One cell for a setting the runs may or may not agree on.
+
+        Silently printing run 0's value hides a methodology mismatch, so when the
+        runs disagree the cell names every value in table order instead.
+        """
+        vals = list(values)
+        if all(v == vals[0] for v in vals):
+            return fmt(vals[0]), True
+        return ("mixed — " + ", ".join(f"{fmt(v)} ({short[i]})"
+                                       for i, v in enumerate(vals)), False)
+
+    def _endpoint(s):
+        # harness runs record "(harness)" as the config base_url; the real endpoint
+        # the adapter dialled lives on the harness block.
+        url = s["config"]["base_url"]
+        if url == "(harness)":
+            url = (s.get("harness") or {}).get("base_url")
+        if not url or url == "(harness)":
+            return None
+        # claude-code dials the Anthropic surface at the root and the others the
+        # OpenAI-compatible /v1 on the same server; compare hosts, not surfaces.
+        return url.rstrip("/").removesuffix("/v1")
+
+    # a run that simply did not record its endpoint is not a disagreement about it
+    eps = [_endpoint(s) for s in S]
+    known = [(short[i], e) for i, e in enumerate(eps) if e]
+    if not known:
+        endpoint = "not recorded"
+    elif all(e == known[0][1] for _, e in known):
+        endpoint = f"`{known[0][1]}`"
+        if len(known) < len(eps):
+            missing = ", ".join(short[i] for i, e in enumerate(eps) if not e)
+            endpoint += f" (not recorded for {missing})"
+    else:
+        endpoint = "mixed — " + ", ".join(f"`{e}` ({n})" for n, e in known)
+    tasks, _ = _shared([s["tasks"] for s in S])
+    conc, conc_same = _shared([s["config"]["concurrency"] for s in S])
+    samples, samples_same = _shared([s["config"]["samples"] for s in S])
+    gens, _ = _shared([s["generations"] for s in S])
+
     out.append("## Setup\n")
     out.append("| | |\n|---|---|")
-    out.append(f"| Endpoint | `{cfg0['base_url']}` |")
-    out.append(f"| Tasks | {S[0]['tasks']} |")
-    out.append(f"| Samples per task | {cfg0['samples']} (⇒ {S[0]['generations']} generations per run) |")
-    out.append(f"| Concurrency | {cfg0['concurrency']} |")
+    out.append(f"| Endpoint | {endpoint} |")
+    out.append(f"| Tasks | {tasks} |")
+    if samples_same:
+        out.append(f"| Samples per task | {samples} (⇒ {gens} generations per run) |")
+    else:
+        out.append(f"| Samples per task | {samples} |")
+    out.append(f"| Concurrency | {conc} |")
     out.append(f"| Metric | pass@1 over hidden executable unit tests |\n")
+    if not (conc_same and samples_same):
+        out.append("<sub>The runs above were **not** all collected under the same settings. "
+                   "Solve rate and tool-call counts are unaffected, but wall-clock is not "
+                   "comparable across rows that differ in concurrency, and scores from "
+                   "different sample counts carry different noise floors.</sub>\n")
 
     # --- results table ---
     agentic = all(s.get("kind") == "agentic" for s in S)
+    # agentic runs predating oracle-par efficiency carry no agent_score; they can
+    # still be reported, just without the column that ranks them.
+    scored = agentic and all(s.get("agent_score") is not None for s in S)
     out.append("## Results\n")
     # rank agentic runs on the agent score; solve rate ties too often to rank on
     best = max(range(len(S)),
-               key=lambda i: (S[i].get("agent_score") if agentic else S[i]["pass_at_1"]))
-    if agentic:
+               key=lambda i: (S[i]["agent_score"] if scored else S[i]["pass_at_1"]))
+    if scored:
         out.append("| Run | Agent score | Solved | Efficiency | Mean calls | Par "
                    "| Valid calls | Turn-limit | Wall |\n"
                    "|---|---|---|---|---|---|---|---|---|")
+    elif agentic:
+        out.append("| Run | solved | easy | medium | hard | Mean turns | Mean calls "
+                   "| Valid calls | Turn-limit | Wall |\n"
+                   "|---|---|---|---|---|---|---|---|---|---|")
     else:
         out.append("| Run | pass@1 | easy | medium | hard | Wall | Mean out tok "
                    "| Truncated | tok/s |\n|---|---|---|---|---|---|---|---|---|")
     for i, s in enumerate(S):
         d = s["by_difficulty"]
         name = f"**{labels[i]}**" if i == best else labels[i]
-        if agentic:
+        if scored:
             score = (f"**{s['agent_score'] * 100:.1f}**" if i == best
                      else f"{s['agent_score'] * 100:.1f}")
             out.append(f"| {name} | {score} "
                        f"| {_fmt(s['pass_at_1'], pct=True)} "
                        f"| {_fmt(s['mean_efficiency'], pct=True)} "
                        f"| {_fmt(s['mean_tool_calls'])} | {_fmt(s['mean_par_calls'])} "
+                       f"| {_fmt(s['valid_call_rate'], pct=True)} | {s['hit_turn_limit']} "
+                       f"| {_fmt(s['wall_seconds'], digits=0)} s |")
+        elif agentic:
+            out.append(f"| {name} | {_fmt(s['pass_at_1'], pct=True)} "
+                       f"| {_fmt(d.get('easy'), pct=True)} "
+                       f"| {_fmt(d.get('medium'), pct=True)} | {_fmt(d.get('hard'), pct=True)} "
+                       f"| {_fmt(s['mean_turns'])} | {_fmt(s['mean_tool_calls'])} "
                        f"| {_fmt(s['valid_call_rate'], pct=True)} | {s['hit_turn_limit']} "
                        f"| {_fmt(s['wall_seconds'], digits=0)} s |")
         else:
@@ -112,13 +176,16 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
                        f"| {_fmt(s['mean_completion_tokens'], digits=0)} "
                        f"| {s['truncated']} | {_fmt(s['mean_tok_s'])} |")
     out.append("")
-    if agentic:
+    if scored:
         out.append("<sub>**Agent score** = solve rate x efficiency, out of 100 — solving is "
                    "the price of entry, efficiency breaks the ties solve rate cannot. "
                    "*Efficiency* = par tool calls / calls actually used, capped at 1 and "
                    "counted only on solved tasks. *Par* is measured by running each task's "
                    "oracle, so it does not depend on the model. *Valid calls* = calls that "
                    "did not error. *Turn-limit* = runs abandoned without finishing.</sub>\n")
+    elif agentic:
+        out.append("<sub>*Valid calls* = tool calls that did not error. *Turn-limit* = runs "
+                   "abandoned after exhausting the turn budget without finishing.</sub>\n")
 
     # --- charts ---
     out.append(_chart("Solve rate (%)" if agentic else "pass@1 (%)",
@@ -127,9 +194,11 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     out.append(_chart("Cost of that accuracy — suite wall-clock (s)", "seconds", short,
                       [s["wall_seconds"] for s in S]))
     if agentic:
-        out.append(_chart("Agent score (solve x efficiency, out of 100)", "score", short,
-                          [s["agent_score"] * 100 for s in S], y_max=100))
-        out.append(_chart("Mean tool calls per task (par is the floor)", "calls", short,
+        if scored:
+            out.append(_chart("Agent score (solve x efficiency, out of 100)", "score", short,
+                              [s["agent_score"] * 100 for s in S], y_max=100))
+        out.append(_chart("Mean tool calls per task (par is the floor)" if scored
+                          else "Mean tool calls per task", "calls", short,
                           [s["mean_tool_calls"] or 0 for s in S]))
         out.append(_chart("Valid tool-call rate (%)", "%", short,
                           [(s["valid_call_rate"] or 0) * 100 for s in S], y_max=100))
@@ -167,10 +236,19 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
         out.append(notes.strip() + "\n")
 
     out.append("## Caveats\n")
-    out.append(f"- {cfg0['samples']} samples per task. Differences under ~8 points are noise, "
-               "not signal.")
-    out.append("- Single-turn Python code generation only. Multi-turn agentic tool use is not "
-               "exercised here.")
+    if samples_same:
+        out.append(f"- {cfg0['samples']} samples per task. Differences under ~8 points are "
+                   "noise, not signal.")
+    else:
+        out.append(f"- Samples per task differ between runs ({samples}). Differences under "
+                   "~8 points are noise, not signal, and the runs with fewer samples are "
+                   "noisier still.")
+    if agentic:
+        out.append("- Multi-turn agentic tool use against a sandboxed workspace. One-shot code "
+                   "generation is not exercised here.")
+    else:
+        out.append("- Single-turn Python code generation only. Multi-turn agentic tool use is "
+                   "not exercised here.")
     if agentic:
         out.append("- Success is decided by a predicate over the final workspace, never by what "
                    "the model claims. Every task's oracle is verified to solve it first.")
