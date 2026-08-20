@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dgx-spark-llm-lab"
+version = "0.1.0"
+description = "Find the best configuration for your daily-driver LLM — then keep it."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=2.0,<3",
+    "aiohttp>=3.8,<4",
+]
+
+[tool.setuptools.packages.find]
+include = ["benchkit*"]
+
+[project.scripts]
+bench = "benchkit.cli:main"
