@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| Endpoint | `http://localhost:8001/v1` |
+| Endpoint | `http://localhost:8001` |
 | Tasks | 8 |
 | Samples per task | 2 (⇒ 16 generations per run) |
 | Concurrency | 4 |
@@ -25,9 +25,9 @@
 
 ```mermaid
 xychart-beta
-    title "pass@1 (%)"
+    title "Solve rate (%)"
     x-axis ["montimage-dg OFF", "montimage-dg ON"]
-    y-axis "pass@1 %" 0 --> 100
+    y-axis "solved %" 0 --> 100
     bar [100, 100]
 ```
 
@@ -92,7 +92,7 @@ workspace, which is what the earlier 87.5 % run was actually measuring.
 ## Caveats
 
 - 2 samples per task. Differences under ~8 points are noise, not signal.
-- Single-turn Python code generation only. Multi-turn agentic tool use is not exercised here.
+- Multi-turn agentic tool use against a sandboxed workspace. One-shot code generation is not exercised here.
 - Success is decided by a predicate over the final workspace, never by what the model claims. Every task's oracle is verified to solve it first.
 - A task abandoned at the turn limit counts as failed; raise `--max-turns` before concluding the model cannot do it.
 

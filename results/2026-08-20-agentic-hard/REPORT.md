@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| Endpoint | `http://localhost:8001/v1` |
+| Endpoint | `http://localhost:8001` |
 | Tasks | 8 |
 | Samples per task | 2 (⇒ 16 generations per run) |
 | Concurrency | 4 |
@@ -113,7 +113,7 @@ stronger model closes the efficiency gap too, this suite will need the same trea
 ## Caveats
 
 - 2 samples per task. Differences under ~8 points are noise, not signal.
-- Single-turn Python code generation only. Multi-turn agentic tool use is not exercised here.
+- Multi-turn agentic tool use against a sandboxed workspace. One-shot code generation is not exercised here.
 - Success is decided by a predicate over the final workspace, never by what the model claims. Every task's oracle is verified to solve it first.
 - A task abandoned at the turn limit counts as failed; raise `--max-turns` before concluding the model cannot do it.
 

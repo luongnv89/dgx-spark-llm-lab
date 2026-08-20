@@ -24,30 +24,49 @@ So the next step is to run the same tasks through the harness sitting on the use
 |---|---|---|
 | **pi** | `pi -p --mode json`, events folded into the standard result shape | **done** — [adapter](benchkit/harness/pi.py), reports on the [base](results/2026-08-20-pi-harness/REPORT.md) and [ranking](results/2026-08-20-pi-harness/REPORT-hard.md) suites |
 | **opencode** | `opencode run --format json`, throwaway provider config via `OPENCODE_CONFIG` | **done** — [adapter](benchkit/harness/opencode.py), [docs](docs/HARNESSES.md#the-opencode-adapter) |
-| **Claude Code** | Custom provider via `ANTHROPIC_BASE_URL`; headless `-p` runs, tool use through its own harness | planned |
+| **Claude Code** | `claude -p --output-format stream-json`, `ANTHROPIC_BASE_URL` at the endpoint's Anthropic Messages API | **done** — [adapter](benchkit/harness/claudecode.py), [docs](docs/HARNESSES.md#the-claude-code-adapter) |
 | **Codex** | CLI with a custom OpenAI-compatible base URL | planned |
 
 The adapter interface, the real-directory execution backend and per-harness token
 accounting all landed with the pi adapter — see [docs/HARNESSES.md](docs/HARNESSES.md).
 Adding a harness is now three methods: `available()`, `describe()`, `run()`.
 
-Three harnesses are now measured on the same model and machine, and they rank differently on
-both suites: opencode 79.3 / 60.3, pi 77.4 / 55.0, benchkit's own loop 67.4 / 44.9 (base /
-ranking). Efficiency is bought with prefill, and the ordering inverts — opencode sends ~179k
-input tokens per task, pi ~119k, and our own loop never measured them at all.
+Four harnesses are now measured on the same model and machine, and they rank differently.
+On the ranking suite: claude-code 68.2, opencode 60.3, pi 55.0, benchkit's own loop 44.9. On
+the base suite, now that claude-code has been re-run at the same samples 2 / concurrency 2 as
+the others: opencode 79.3, pi 77.4, claude-code 76.7, our loop 67.4. All four solve 100 % of
+the base suite, so that ordering is efficiency alone, and the top three sit within 2.6 points
+of each other — a tie at this sample count.
 
-The three-way view also answers the question the two-way one raised. pi's efficiency lead on
-the ranking suite came partly from solving less (87.5 % against 93.8 %); opencode reaches the
-same efficiency while matching benchkit's solve rate, which is what separates "efficient
-because it is good" from "efficient because it gave up earlier". Solve rate and efficiency
-stay as separate columns next to the composite for exactly this reason.
+The top of the ranking table is closer than it looks: at 2 samples over 8 tasks one generation
+is 6.25 points, so claude-code's 7.9-point lead over opencode and its 100 % versus 93.8 %
+solve rate are both inside the noise band. Treat the top two as tied and the bottom two as
+separated.
+
+What is *not* noise is prefill. The three-way view concluded that efficiency here is bought
+with context — opencode ~179k input tokens per task, pi ~119k, our own loop never measured them
+at all. claude-code breaks that trade: ~16k per task, an order of magnitude below either, with
+the fewest tool calls of the four (9.0 against a par of 5.9). Call count alone would have
+missed this entirely.
+
+The multi-way view also answers the question the two-way one raised. pi's efficiency lead on
+the ranking suite came partly from solving less (87.5 % against 93.8 %); opencode and
+claude-code reach equal or better efficiency without giving up solve rate, which is what
+separates "efficient because it is good" from "efficient because it gave up earlier". Solve
+rate and efficiency stay as separate columns next to the composite for exactly this reason.
+
+One caveat on the table itself: with every harness now above 87.5 % solved, the 8-task ranking
+suite is close to saturating and no longer has the headroom to separate the top two.
 
 Still open for the remaining adapters:
 
-Still open for the remaining adapters:
-
-- Claude Code and Codex expose less structured telemetry than pi's and opencode's JSONL; call
-  and token counts may have to come from session transcripts rather than a live event stream.
+- Claude Code turned out to expose enough: `--output-format stream-json` carries tool calls,
+  turns, stop reason and token totals without touching session transcripts. The one gap is
+  reasoning tokens, which the local Anthropic surface reports as `0`; they are billed inside
+  output tokens and the adapter says so in `describe()`. Codex is still unmeasured.
+- Claude Code only works against this endpoint because vLLM implements `/v1/messages` and the
+  router proxies it. It has no OpenAI-compatibility mode, so the adapter is not portable to an
+  OpenAI-only server — `available()` probes `/v1/messages/count_tokens` and refuses up front.
 - Harnesses that batch several edits into one call are not comparable to ones that do not on
   call count alone — the token columns have to be read alongside.
 - Thinking mode is not uniformly controllable. pi takes a level, opencode takes a

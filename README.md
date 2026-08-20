@@ -27,9 +27,9 @@ serve, not a number you quote:
   wins by thinking for 16k tokens has not won.
 - **Two workload shapes.** One-shot code generation *and* multi-turn agentic tool calling,
   because they disagree.
-- **Your harness, not ours.** The same model scores 12 points apart through three different
+- **Your harness, not ours.** The same model scores 12 points apart through four different
   tool loops, so the suites also run through the coding agent you actually use (`pi`,
-  `opencode`).
+  `opencode`, `claude-code`).
 - **The winner is installable.** `./bench apply <config> --restart` and you're serving it.
 - **Nothing scored on vibes.** Hidden executable unit tests and workspace predicates, each
   proven passable by a reference solution before any model is judged.
@@ -146,8 +146,8 @@ computed). Architecture, ports and rollback: [SERVING.md](SERVING.md).
 | [2026-08-20](results/2026-08-20-ornith-vs-qwen3.6/) | Should Ornith-1.5-35B-A3B replace Qwen3.6-35B-A3B? | **No.** Ties at its best config, −20 points at the config we deploy |
 | [2026-08-20](results/2026-08-20-agentic-baseline/) | Can the winner drive a tool loop, and does thinking help there? | **Yes**, 16/16 in both modes — the suite is a floor, not a ranking. Thinking cuts turns 6.8 → 5.2 at no accuracy cost |
 | [2026-08-20](results/2026-08-20-agentic-hard/) | Can a harder agentic suite separate configs that both look perfect? | **Yes**, 54.6 vs 50.1. Solve rate still nearly ties; efficiency against oracle par is what separates them |
-| [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 through our loop, 77.4 through `pi`, 79.3 through `opencode` |
-| [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `opencode` 60.3, `pi` 55.0, our loop 44.9 — and efficiency is bought with prefill: ~179k vs ~119k input tokens per task |
+| [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 through our loop, 76.7 through `claude-code`, 77.4 through `pi`, 79.3 through `opencode`. All solve 100 %, so the top three are tied — the real spread is prefill |
+| [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `claude-code` 68.2, `opencode` 60.3, `pi` 55.0, our loop 44.9 — top two tied inside noise, but the prefill spread is not: ~16k vs ~119k vs ~179k input tokens per task |
 
 The recurring lesson: **always benchmark both thinking modes, on the workload you actually
 run.** Reasoning-trained models collapse without their thinking block; non-reasoning models

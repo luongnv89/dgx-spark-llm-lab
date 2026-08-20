@@ -137,7 +137,67 @@ whose predicate is satisfied by the source being untouched. `run_task` now fails
 where the harness errored, timed out, or made no tool calls at all: a run that never started
 cannot have solved anything. Any harness you add inherits that guard.
 
+## The Claude Code adapter
+
+`benchkit/harness/claudecode.py`, driving
+`claude -p <prompt> --output-format stream-json --verbose`. Tool calls come from `tool_use`
+content blocks on `assistant` events, failures from `is_error` on the matching `tool_result`,
+and turns, stop reason and token totals from the single final `result` event.
+
+### It only works because the endpoint serves two APIs
+
+Claude Code speaks the **Anthropic Messages API**. It has no OpenAI-compatibility mode, so
+`BENCH_BASE_URL` — which is OpenAI-shaped, `.../v1/chat/completions` — is not usable as such.
+It works here for a reason specific to this stack: vLLM implements `/v1/messages`, and
+`router.py` proxies it alongside the OpenAI routes. `ANTHROPIC_BASE_URL` therefore points at
+the API *root* (`http://localhost:8001`, no `/v1` — Claude Code appends its own).
+
+`available()` probes `/v1/messages/count_tokens` explicitly rather than settling for a
+`/v1/models` listing. An endpoint that serves OpenAI traffic and not Anthropic traffic passes
+every other check and then fails every task after burning its full timeout; that is exactly
+the shape of failure this repo's guard rails exist to catch early. Against such an endpoint
+this adapter cannot be made to work and says so.
+
+### Claude Code reaches further by default than pi or opencode
+
+Two of its built-in tools would invalidate the measurement outright, and its defaults pull in
+this machine's whole configuration:
+
+| Flag | Why |
+|---|---|
+| `--tools Bash Read Edit Write Glob Grep` | pins the built-in set. The default includes `Task`/`Workflow`, which spawn subagents that can be pointed at **other models**, and `WebSearch`/`WebFetch`, which pull outside context into a run claiming to measure a local model. This is the counterpart to pi's `--no-extensions` and opencode's `--pure` |
+| `--bare` | skips hooks, LSP, plugin sync, auto-memory and **CLAUDE.md auto-discovery** — pi's `--no-context-files` |
+| `--disable-slash-commands` | skills are user-installed prompt injections; this machine has dozens |
+| `--strict-mcp-config` + empty `--mcp-config` | MCP servers are arbitrary external tools |
+| `--setting-sources ""` | ignore user/project/local settings files |
+| `--no-session-persistence` | no state carries between tasks |
+| `CLAUDE_CONFIG_DIR` | a throwaway config home *next to* the workspace, so session and project state never lands in the scored directory and never touches the user's `~/.claude` |
+
+`--permission-mode bypassPermissions` approves tool use, safe here for the same reason as
+opencode's `--auto`: the workspace is a throwaway temp directory. `stdin` is `DEVNULL`, for
+the reason the pi section records. Env inherited from a *parent* Claude Code session
+(`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `ANTHROPIC_MODEL`, the Bedrock/Vertex switches, …)
+is scrubbed, or the child would be told it is a nested run and behave differently mid-benchmark.
+
+### What it cannot measure
+
+Better than the ROADMAP feared — calls, turns, stop reason and tokens are all there — with
+one real gap:
+
+- **`reasoning_tokens` is always 0.** Claude Code reports thinking tokens in
+  `usage.output_tokens_details.thinking_tokens`, which the local vLLM Anthropic surface
+  reports as `0` even for responses that visibly contain `thinking` blocks. Those tokens are
+  billed inside `output_tokens`, so the output column is right and the reasoning column is
+  not. `describe()` carries that caveat into every result file: a `0` here means *not
+  measured*, not *did not think*.
+- **`--thinking` does not toggle claude-code runs**, the same limitation as opencode. The
+  server's default thinking mode applies. `--effort` is exposed as a constructor argument but
+  is not wired to `--thinking`, because it is Claude Code's effort setting and not the
+  server's `enable_thinking` kwarg, and conflating the two would make the columns lie.
+
+Input tokens sum `input_tokens` plus both cache fields, so the column stays comparable with
+pi's and opencode's, which count every token sent.
+
 ## Planned adapters
 
-Claude Code (headless `-p`, custom provider via `ANTHROPIC_BASE_URL`) and Codex. See
-[ROADMAP.md](../ROADMAP.md).
+Codex (CLI with a custom OpenAI-compatible base URL). See [ROADMAP.md](../ROADMAP.md).
