@@ -1,0 +1,32 @@
+# pre-commit hooks for ruff (linting) and mypy (type checking)
+# Scoped to benchkit/ and router.py — the active source tree.
+
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: results/
+      - id: end-of-file-fixer
+        exclude: results/
+      - id: check-yaml
+        exclude: results/
+      - id: check-added-large-files
+        exclude: results/
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^benchkit/|router\.py$
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies: []
+        files: ^benchkit/|router\.py$
