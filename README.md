@@ -1,11 +1,30 @@
 # dgx-spark-llm-lab
 
-**Benchmark a local coding LLM, then keep the config that won.**
+**Find the best configuration for your daily-driver LLM — then keep it.**
 
-A reproducible harness for answering one question honestly: *is this new model actually
-better than the one I'm serving?* It runs a suite of coding tasks with hidden executable
-unit tests against any OpenAI-compatible endpoint, and emits a Markdown report with
-charts you can hand to someone else.
+Public benchmarks rank *models* on hardware you don't have, at settings you won't use.
+This one answers a narrower and more useful question: **of the things I could actually
+serve on this box, which exact configuration should I run every day?**
+
+A configuration is more than a model name — it's the model, the quantisation, the serving
+flags, and the thinking mode, together. Those interact: the same weights score 60.7 % or
+80.4 % on the same suite depending on one chat-template kwarg, and the right answer flips
+between one-shot coding and tool loops. A leaderboard cannot tell you that. Measuring on
+your own endpoint can.
+
+So the loop here is **benchmark → decide → install**, and it ends in a config file you
+serve, not a number you quote:
+
+- **Measured where it runs.** Any OpenAI-compatible endpoint, your hardware, your flags.
+- **Both thinking modes, always.** Reported as separate rows, because they are separate
+  products.
+- **Cost next to accuracy.** Output tokens, wall-clock, turns, truncation — a model that
+  wins by thinking for 16k tokens has not won.
+- **Two workload shapes.** One-shot code generation *and* multi-turn agentic tool calling,
+  because they disagree.
+- **The winner is installable.** `./bench apply <config> --restart` and you're serving it.
+- **Nothing scored on vibes.** Hidden executable unit tests and workspace predicates, each
+  proven passable by a reference solution before any model is judged.
 
 Built and used on an **NVIDIA DGX Spark (GB10)**, but the harness itself only needs a URL.
 
