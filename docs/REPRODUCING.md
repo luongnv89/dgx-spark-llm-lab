@@ -1,5 +1,10 @@
 # Reproducing a benchmark
 
+The goal of a run here is not a score to quote — it is a decision: *which configuration do
+I serve tomorrow?* So benchmark the candidates in both thinking modes, read accuracy and
+cost together, then install the winner with `bench apply`. A result that does not change
+what you serve was not worth running.
+
 Everything here runs against **any OpenAI-compatible endpoint** — vLLM, llama.cpp's
 `llama-server`, ollama, LM Studio, or a hosted API. You do not need the DGX Spark box;
 that only matters for the `compare` and `apply` commands, which drive a local systemd
