@@ -18,7 +18,7 @@
 
 | Run | Agent score | Solved | Efficiency | Mean calls | Par | Valid calls | Turn-limit | Wall |
 |---|---|---|---|---|---|---|---|---|
-| Qwen3.6-35B-A3B think-OFF | **50.1** | 93.8 % | 53.5 % | 13.2 | 5.9 | 97.6 % | 0 | 205 s |
+| Qwen3.6-35B-A3B think-OFF | 50.1 | 93.8 % | 53.5 % | 13.2 | 5.9 | 97.6 % | 0 | 205 s |
 | **Qwen3.6-35B-A3B think-ON** | **54.6** | 100.0 % | 54.6 % | 12.2 | 5.9 | 96.9 % | 0 | 228 s |
 
 <sub>**Agent score** = solve rate x efficiency, out of 100 — solving is the price of entry, efficiency breaks the ties solve rate cannot. *Efficiency* = par tool calls / calls actually used, capped at 1 and counted only on solved tasks. *Par* is measured by running each task's oracle, so it does not depend on the model. *Valid calls* = calls that did not error. *Turn-limit* = runs abandoned without finishing.</sub>

@@ -20,7 +20,7 @@ def _print_agentic(r):
     print(f"  {mark}  {r['task']:<24} s{r['sample']} "
           f"{r['turns']:>3} turns {r['tool_calls']:>3} calls "
           f"({r['failed_calls']} failed) {r['stop_reason']:<12} "
-          f"{r['completion_tokens']:>6}tok {r['elapsed']:6.1f}s"
+          f"{r.get('completion_tokens') or 0:>6}tok {(r.get('elapsed') or 0):6.1f}s"
           + (f"   <{str(r.get('error'))[:60]}>" if not r["passed"] else ""), flush=True)
 
 
@@ -164,6 +164,56 @@ def cmd_compare(args):
     return 0
 
 
+def cmd_harness(args):
+    """Run a suite through a real coding harness on this machine."""
+    from benchkit import harness as H
+    from benchkit.harness import runner as hrunner
+
+    if args.harness_cmd == "list":
+        for name in H.HARNESSES:
+            h = H.get(name)
+            ok, detail = h.available()
+            print(f"{name:<10} {'ok     ' if ok else 'MISSING'} {detail}")
+        return 0
+
+    h = H.get(args.harness, **({"provider": args.provider} if args.provider else {}),
+              **({"model": args.harness_model} if args.harness_model else {}))
+    tasks = get(args.suite)
+    if kind(args.suite) != "agentic":
+        raise SystemExit("harness runs need an agentic suite "
+                         "(agentic, agentic-hard, agentic-all)")
+    cfg = runner.Config(base_url="(harness)", model=h.name, label=args.label,
+                        thinking=args.thinking, max_tokens=0, samples=args.samples,
+                        concurrency=args.concurrency, test_timeout=args.test_timeout)
+    if not cfg.label:
+        cfg.label = f"{h.name} think-{'ON' if args.thinking else 'OFF'}"
+    ok, detail = h.available()
+    print(f"harness={h.name}  {detail}\nsuite={args.suite} ({len(tasks)} tasks)  "
+          f"{cfg.label}  samples={cfg.samples} concurrency={cfg.concurrency}\n", flush=True)
+
+    summary, results = hrunner.run(h, tasks, cfg, on_result=_print_agentic,
+                                   timeout=args.timeout, keep_dirs=args.keep_dirs)
+    out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w") as f:
+        json.dump(dict(summary=summary, results=results), f, indent=2)
+
+    print("\n" + "=" * 64)
+    print(f"agent score            {summary['agent_score'] * 100:.1f}   "
+          f"(solve {summary['pass_at_1'] * 100:.1f} % x efficiency "
+          f"{(summary['mean_efficiency'] or 0) * 100:.1f} %)")
+    print(f"mean calls vs par      {summary['mean_tool_calls']:.1f} vs "
+          f"{summary['mean_par_calls']:.1f}")
+    print(f"mean turns             {summary['mean_turns']:.1f}")
+    print(f"tokens in / out        {summary['mean_input_tokens']:.0f} / "
+          f"{summary['mean_completion_tokens'] or 0:.0f} per task")
+    print(f"valid tool-call rate   {(summary['valid_call_rate'] or 0) * 100:.1f} %")
+    print(f"wall                   {summary['wall_seconds']:.0f} s")
+    print("=" * 64)
+    print(f"\nwritten to {out}")
+    return 0
+
+
 def cmd_configs(args):
     from benchkit import serving
     active = serving.current_model()
@@ -253,6 +303,23 @@ def main(argv=None):
     s.add_argument("--no-restore", dest="restore", action="store_false",
                    help="leave the last model serving instead of restoring the original")
     s.set_defaults(func=cmd_compare)
+
+    s = sub.add_parser("harness", help="run a suite through a real coding harness (pi, ...)")
+    s.add_argument("harness_cmd", nargs="?", default="run", choices=["run", "list"])
+    s.add_argument("--harness", default="pi")
+    s.add_argument("--provider", help="harness-side provider name (pi: --provider)")
+    s.add_argument("--harness-model", help="harness-side model id")
+    s.add_argument("--suite", default="agentic-hard", choices=list(SUITES))
+    s.add_argument("--samples", type=int, default=1)
+    s.add_argument("--concurrency", type=int, default=2)
+    s.add_argument("--thinking", action="store_true")
+    s.add_argument("--timeout", type=int, default=900, help="seconds per task")
+    s.add_argument("--test-timeout", type=int, default=60)
+    s.add_argument("--label", default="")
+    s.add_argument("--out")
+    s.add_argument("--keep-dirs", action="store_true",
+                   help="leave each task's working directory on disk for inspection")
+    s.set_defaults(func=cmd_harness)
 
     s = sub.add_parser("configs", help="list known-good serving configs")
     s.set_defaults(func=cmd_configs)

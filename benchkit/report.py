@@ -82,7 +82,9 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     # --- results table ---
     agentic = all(s.get("kind") == "agentic" for s in S)
     out.append("## Results\n")
-    best = max(range(len(S)), key=lambda i: S[i]["pass_at_1"])
+    # rank agentic runs on the agent score; solve rate ties too often to rank on
+    best = max(range(len(S)),
+               key=lambda i: (S[i].get("agent_score") if agentic else S[i]["pass_at_1"]))
     if agentic:
         out.append("| Run | Agent score | Solved | Efficiency | Mean calls | Par "
                    "| Valid calls | Turn-limit | Wall |\n"
@@ -94,7 +96,9 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
         d = s["by_difficulty"]
         name = f"**{labels[i]}**" if i == best else labels[i]
         if agentic:
-            out.append(f"| {name} | **{s['agent_score'] * 100:.1f}** "
+            score = (f"**{s['agent_score'] * 100:.1f}**" if i == best
+                     else f"{s['agent_score'] * 100:.1f}")
+            out.append(f"| {name} | {score} "
                        f"| {_fmt(s['pass_at_1'], pct=True)} "
                        f"| {_fmt(s['mean_efficiency'], pct=True)} "
                        f"| {_fmt(s['mean_tool_calls'])} | {_fmt(s['mean_par_calls'])} "

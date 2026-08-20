@@ -22,21 +22,25 @@ So the next step is to run the same tasks through the harness sitting on the use
 
 | Harness | Integration route | Status |
 |---|---|---|
-| **pi** | Local config points at the endpoint; drive tasks through its CLI | planned |
+| **pi** | `pi -p --mode json`, events folded into the standard result shape | **done** — [adapter](benchkit/harness/pi.py), [report](results/2026-08-20-pi-harness/REPORT.md) |
 | **opencode** | Model provider config + headless run per task | planned |
 | **Claude Code** | Custom provider via `ANTHROPIC_BASE_URL`; headless `-p` runs, tool use through its own harness | planned |
 | **Codex** | CLI with a custom OpenAI-compatible base URL | planned |
 
-What this needs:
+The adapter interface, the real-directory execution backend and per-harness token
+accounting all landed with the pi adapter — see [docs/HARNESSES.md](docs/HARNESSES.md).
+Adding a harness is now three methods: `available()`, `describe()`, `run()`.
 
-- A harness adapter interface: given a task workspace and a goal, run the harness to
-  completion and hand back the final workspace. Scoring stays exactly as it is — the
-  `check(ws)` predicates and oracle par are harness-agnostic by design.
-- A real temp directory per task instead of the in-memory workspace, since external
-  harnesses drive a filesystem. `Workspace` already materialises and syncs, so this is a
-  swap of the execution backend, not a rewrite.
-- Per-harness cost accounting: turns and tokens are not comparable across harnesses without
-  recording each one's own overhead (system prompt size, tool schema size, context resends).
+The first result already justifies the exercise: the same model on the same tasks scores
+67.4 through benchkit's own loop and 77.4 through pi, entirely on efficiency, while pi
+spends ~91k input tokens per task that our loop never reported at all.
+
+Still open for the remaining adapters:
+
+- Claude Code and Codex expose less structured telemetry than pi's JSONL; call and token
+  counts may have to come from session transcripts rather than a live event stream.
+- Harnesses that batch several edits into one call are not comparable to ones that do not on
+  call count alone — the token columns have to be read alongside.
 
 The output is the comparison nobody currently has: *for **this** machine and **this**
 harness, which model and which settings?* — with the answer legitimately differing between
