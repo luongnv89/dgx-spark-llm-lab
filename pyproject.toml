@@ -27,3 +27,9 @@ line-length = 100
 
 [tool.mypy]
 exclude = ["results/"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "ruff==0.6.9",
+]
