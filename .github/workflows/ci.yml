@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies from lockfile
+        run: uv sync --locked
+
+      - name: Run ruff check
+        run: uv run ruff check .
+
+      - name: Run mypy
+        run: uv run mypy benchkit router.py --ignore-missing-imports
+
+      - name: Run bench validate
+        run: uv run ./bench validate
+
+      - name: Run bench validate agentic-all
+        run: uv run ./bench validate --suite agentic-all
