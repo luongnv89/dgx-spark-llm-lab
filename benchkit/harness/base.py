@@ -47,13 +47,26 @@ class Harness:
         """Version and configuration, recorded in the result file."""
         return {}
 
+    def prepare(self, container):
+        """Given a fresh temp dir, return the directory the task files go in.
+
+        A harness that needs config files of its own writes them into
+        `container` and returns a subdirectory, so its own plumbing never shows
+        up inside the workspace the model sees or the one that gets scored.
+        """
+        return container
+
+    #: files the harness writes into the workspace that are not part of the task
+    excluded_files = ()
+
     def run(self, workdir, prompt, timeout=900, thinking=False):
         raise NotImplementedError
 
 
 def run_task(harness, task, sample, timeout=900, thinking=False, keep_dir=False):
     """Materialise a task, hand it to the harness, score the directory it leaves."""
-    workdir = tempfile.mkdtemp(prefix=f"benchkit-{harness.name}-")
+    container = tempfile.mkdtemp(prefix=f"benchkit-{harness.name}-")
+    workdir = harness.prepare(container)
     try:
         for path, body in task["files"].items():
             full = os.path.join(workdir, path)
@@ -66,11 +79,20 @@ def run_task(harness, task, sample, timeout=900, thinking=False, keep_dir=False)
         elapsed = time.perf_counter() - t0
 
         ws = Workspace(task["files"])
-        ws.files = _read_back(workdir)
+        ws.files = _read_back(workdir, exclude=harness.excluded_files)
         try:
             solved, detail = task["check"](ws)
         except Exception as e:  # noqa: BLE001 — a broken predicate is a test bug, report it
             solved, detail = False, f"check raised {e!r}"
+
+        # A run that never started cannot have solved anything. Without this, a
+        # harness that dies on launch "passes" every task whose predicate is
+        # satisfied by the initial state — verify_no_change_needed most obviously,
+        # which is scored on the source being untouched.
+        if hr.stop_reason in ("error", "timeout") or (hr.tool_calls == 0 and hr.turns == 0):
+            if solved:
+                detail = f"harness produced no work ({hr.stop_reason}); not counted as solved"
+            solved = False
 
         from ..agentic.loop import par_calls
         par = par_calls(task)
@@ -95,18 +117,21 @@ def run_task(harness, task, sample, timeout=900, thinking=False, keep_dir=False)
         )
     finally:
         if not keep_dir:
-            shutil.rmtree(workdir, ignore_errors=True)
+            shutil.rmtree(container, ignore_errors=True)
 
 
-def _read_back(workdir, max_bytes=1_000_000):
+def _read_back(workdir, max_bytes=1_000_000, exclude=()):
     """Read the directory the harness left into a workspace-shaped dict."""
     out = {}
+    exclude = set(exclude)
     for root, dirs, names in os.walk(workdir):
         dirs[:] = [d for d in dirs if d not in
                    (".git", "__pycache__", ".pi", ".claude", "node_modules", ".venv")]
         for n in names:
             full = os.path.join(root, n)
             rel = os.path.relpath(full, workdir)
+            if rel in exclude:
+                continue
             try:
                 if os.path.getsize(full) > max_bytes:
                     continue

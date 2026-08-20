@@ -23,7 +23,7 @@ So the next step is to run the same tasks through the harness sitting on the use
 | Harness | Integration route | Status |
 |---|---|---|
 | **pi** | `pi -p --mode json`, events folded into the standard result shape | **done** — [adapter](benchkit/harness/pi.py), reports on the [base](results/2026-08-20-pi-harness/REPORT.md) and [ranking](results/2026-08-20-pi-harness/REPORT-hard.md) suites |
-| **opencode** | Model provider config + headless run per task | planned |
+| **opencode** | `opencode run --format json`, throwaway provider config via `OPENCODE_CONFIG` | **done** — [adapter](benchkit/harness/opencode.py), [docs](docs/HARNESSES.md#the-opencode-adapter) |
 | **Claude Code** | Custom provider via `ANTHROPIC_BASE_URL`; headless `-p` runs, tool use through its own harness | planned |
 | **Codex** | CLI with a custom OpenAI-compatible base URL | planned |
 
@@ -31,23 +31,29 @@ The adapter interface, the real-directory execution backend and per-harness toke
 accounting all landed with the pi adapter — see [docs/HARNESSES.md](docs/HARNESSES.md).
 Adding a harness is now three methods: `available()`, `describe()`, `run()`.
 
-The first results already justify the exercise. On the base suite the same model on the same
-tasks scores 67.4 through benchkit's own loop and 77.4 through pi, entirely on efficiency.
-On the ranking suite it inverts: pi solves *fewer* tasks (87.5 % against 93.8 %) while using a
-third fewer tool calls, for 55.0 against 44.9. Either way pi spends ~119k input tokens per
-task that our own loop never reported at all.
+Three harnesses are now measured on the same model and machine, and they rank differently on
+both suites: opencode 79.3 / 60.3, pi 77.4 / 55.0, benchkit's own loop 67.4 / 44.9 (base /
+ranking). Efficiency is bought with prefill, and the ordering inverts — opencode sends ~179k
+input tokens per task, pi ~119k, and our own loop never measured them at all.
 
-That inversion is also the clearest open question about the agent score: it weights efficiency
-enough that a lost solve can be outweighed. Reporting solve rate and efficiency as separate
-columns alongside it is the current answer; a better composite may be needed once more
-harnesses are in.
+The three-way view also answers the question the two-way one raised. pi's efficiency lead on
+the ranking suite came partly from solving less (87.5 % against 93.8 %); opencode reaches the
+same efficiency while matching benchkit's solve rate, which is what separates "efficient
+because it is good" from "efficient because it gave up earlier". Solve rate and efficiency
+stay as separate columns next to the composite for exactly this reason.
 
 Still open for the remaining adapters:
 
-- Claude Code and Codex expose less structured telemetry than pi's JSONL; call and token
-  counts may have to come from session transcripts rather than a live event stream.
+Still open for the remaining adapters:
+
+- Claude Code and Codex expose less structured telemetry than pi's and opencode's JSONL; call
+  and token counts may have to come from session transcripts rather than a live event stream.
 - Harnesses that batch several edits into one call are not comparable to ones that do not on
   call count alone — the token columns have to be read alongside.
+- Thinking mode is not uniformly controllable. pi takes a level, opencode takes a
+  provider-specific `--variant`, and neither maps cleanly onto the `enable_thinking` kwarg the
+  direct suites toggle. Until that is normalised, compare harness rows against each other
+  rather than against a specific thinking mode elsewhere.
 
 The output is the comparison nobody currently has: *for **this** machine and **this**
 harness, which model and which settings?* — with the answer legitimately differing between

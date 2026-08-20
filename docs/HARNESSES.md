@@ -99,7 +99,45 @@ back, scoring, par, the agent score, the report — is already done for you.
 Report what you cannot measure as zero and say so in `describe()`. A harness that does not
 expose token usage should not silently look cheap.
 
+## The opencode adapter
+
+`benchkit/harness/opencode.py`, driving `opencode run --format json`. Events map cleanly:
+`tool_use` per call (with `state.status` for failures), `step_start`/`step_finish` for steps,
+and per-step token counts on `step_finish`.
+
+opencode had no entry for the local endpoint, and editing the user's global
+`~/.config/opencode/opencode.json` would change how their editor behaves. The adapter writes
+a throwaway provider config **next to** the task directory instead, so nothing lands in the
+workspace the model sees or the one that gets scored.
+
+Getting that to work took three findings, none of which are visible from the docs:
+
+| Problem | Fix |
+|---|---|
+| Project-config discovery found the provider when the identical argv ran through a shell, and not when it was exec'd directly — every task died a second in with `ProviderModelNotFoundError` | Pass the path explicitly in `OPENCODE_CONFIG` |
+| Doing that moved opencode's project root to the config file's directory, and the model then reported it could not find the task's files | Pass `--dir <workdir>` as well; it is *not* redundant with `cwd` |
+| Extensions and plugins can reach other models | `--pure`, the counterpart to pi's `--no-extensions` |
+
+`--auto` approves tool use, which is safe here only because the workspace is a throwaway temp
+directory.
+
+### Thinking
+
+opencode exposes `--variant` for provider-specific reasoning effort rather than a boolean. The
+adapter takes a `variant` argument and otherwise leaves the server's default thinking mode in
+place — for the local vLLM config that is thinking ON. This is a real limitation: unlike the
+direct suites and the pi adapter, `--thinking` does not currently toggle opencode runs, so
+compare opencode rows against each other rather than against a specific thinking mode
+elsewhere.
+
+## A run that does nothing must not score
+
+While the opencode adapter was failing at launch, it "passed" `verify_no_change_needed` —
+whose predicate is satisfied by the source being untouched. `run_task` now fails any task
+where the harness errored, timed out, or made no tool calls at all: a run that never started
+cannot have solved anything. Any harness you add inherits that guard.
+
 ## Planned adapters
 
-`opencode`, Claude Code (headless `-p`, custom provider via `ANTHROPIC_BASE_URL`), and
-Codex. See [ROADMAP.md](../ROADMAP.md).
+Claude Code (headless `-p`, custom provider via `ANTHROPIC_BASE_URL`) and Codex. See
+[ROADMAP.md](../ROADMAP.md).
