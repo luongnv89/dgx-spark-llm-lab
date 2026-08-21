@@ -1,62 +1,19 @@
-# dgx-spark-llm-lab
+![license](https://img.shields.io/badge/license-MIT-blue)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
+![validate](https://img.shields.io/badge/validate-28%2F28-brightgreen)
+![reference hardware](https://img.shields.io/badge/reference%20hardware-DGX%20Spark%20GB10-76B900)
 
-**Find the best configuration for your daily-driver LLM — then keep it.**
+# Find the best LLM setup for your own machine
 
-Public benchmarks rank *models* on hardware you don't have, at settings you won't use.
-This one answers a narrower and more useful question: **of the things I could actually
-serve on this box, which exact configuration should I run every day?**
+Public leaderboards rank models on hardware you don't have, at settings you won't use.
+This runs the suites against your endpoint and ends in a config file you serve.
 
-The answer is machine-local, and that is the point. The best setup for user A is routinely
-the wrong one for user B — different GPU, different memory ceiling, different quantisation
-available, different concurrency, different work. A published score cannot know any of
-that. Running the suite on your own endpoint can.
+[**Best recipe now &rarr;**](#best-recipe-right-now) · [**Quick start &rarr;**](#quick-start) · [**Findings &rarr;**](#what-the-campaigns-found)
 
-A configuration is more than a model name — it's the model, the quantisation, the serving
-flags, and the thinking mode, together. Those interact: the same weights score 60.7 % or
-80.4 % on the same suite depending on one chat-template kwarg, and the right answer flips
-between one-shot coding and tool loops. A leaderboard cannot tell you that. Measuring on
-your own endpoint can.
+## Best recipe right now
 
-So the loop here is **benchmark → decide → install**, and it ends in a config file you
-serve, not a number you quote:
-
-- **Measured where it runs.** Any OpenAI-compatible endpoint, your hardware, your flags.
-- **Both thinking modes, always.** Reported as separate rows, because they are separate
-  products.
-- **Cost next to accuracy.** Output tokens, wall-clock, turns, truncation — a model that
-  wins by thinking for 16k tokens has not won.
-- **Two workload shapes.** One-shot code generation *and* multi-turn agentic tool calling,
-  because they disagree.
-- **Your harness and your models, not ours.** `bench harness models` lists what your
-  opencode or pi install can already reach; pick one and benchmark it. A model neither knows
-  about is reachable with `--endpoint <url>` on any of the three harnesses. Nothing is
-  written to your editor's configuration either way.
-- **Your harness, not ours.** The same model scores 12 points apart through four different
-  tool loops, so the suites also run through the coding agent you actually use (`pi`,
-  `opencode`, `claude-code`).
-- **The winner is installable.** `./bench apply <config> --restart` and you're serving it.
-- **Nothing scored on vibes.** Hidden executable unit tests and workspace predicates, each
-  proven passable by a reference solution before any model is judged.
-
-Built and used on an **NVIDIA DGX Spark (GB10)**, but the harness itself only needs a URL.
-
-```bash
-pip install -e .
-export BENCH_BASE_URL=http://localhost:8001/v1 BENCH_MODEL=my-model
-
-./bench validate                      # 44/44 — the tests are passable
-./bench run --suite all --thinking --max-tokens 16000 --label "my-model think-ON"
-./bench report results/*/run-*.json --title "My model" --verdict "..."
-```
-
-The last command writes a `REPORT.md` like
-[this one](results/2026-08-20-ornith-vs-qwen3.6/REPORT.md).
-
-## Current winner — `qwen3.6-35b-a3b-nvfp4`
-
-As of the 2026-08-20 round, the configuration to serve is **Qwen3.6-35B-A3B-NVFP4 on
-vLLM with thinking off**. It survived a head-to-head against Ornith-1.5-35B-A3B and tops
-every suite it has been run on.
+**Qwen3.6-35B-A3B-NVFP4 on vLLM, thinking off.** Won the 2026-08-20 round and tops every
+suite it has been run on.
 
 ```bash
 ./bench apply qwen3.6-35b-a3b-nvfp4 --restart
@@ -64,36 +21,121 @@ every suite it has been run on.
 
 | | |
 |---|---|
-| Model | `unsloth/Qwen3.6-35B-A3B-NVFP4` (MoE, ~3B active) |
-| Serving | vLLM, TP1, 262k ctx, fp8 KV cache, MTP speculative decoding (k=2), prefix caching |
-| Memory | `--gpu-memory-utilization 0.62` (~74 GB of the 119 GB unified pool) |
+| Weights | `unsloth/Qwen3.6-35B-A3B-NVFP4` — MoE, ~3B active |
+| Serving | vLLM TP1, 262k ctx, fp8 KV cache, MTP speculative decoding (k=2), prefix caching |
+| Memory | `--gpu-memory-utilization 0.62` — ~74 GB of the 119 GB unified pool |
 | Recipe | [`configs/qwen3.6-35b-a3b-nvfp4.sh`](configs/qwen3.6-35b-a3b-nvfp4.sh) |
-| `hard12` + `core16` | **82.1 % pass@1** thinking-on, 80.4 % thinking-off ([report](results/2026-08-20-ornith-vs-qwen3.6/REPORT.md)) |
-| `agentic` | **100 % solved**, 95–97 % valid tool calls, no malformed arguments ([report](results/2026-08-20-agentic-baseline/REPORT.md)) |
-| `agentic-hard` | **agent score 54.6** thinking-on (100 % solved x 54.6 % efficiency), 50.1 thinking-off ([report](results/2026-08-20-agentic-hard/REPORT.md)) |
-| Throughput | ~35–48 tok/s per stream, ~122–187 tok/s aggregate at concurrency 4 |
+| `core16` + `hard12` | **82.1 %** pass@1 thinking-on · 80.4 % thinking-off ([report](results/2026-08-20-ornith-vs-qwen3.6/REPORT.md)) |
+| `agentic` | **100 %** solved · 95–97 % valid tool calls ([report](results/2026-08-20-agentic-baseline/REPORT.md)) |
+| `agentic-hard` | **agent score 54.6** thinking-on · 50.1 thinking-off ([report](results/2026-08-20-agentic-hard/REPORT.md)) |
+| Throughput | ~35–48 tok/s per stream · ~122–187 tok/s aggregate at concurrency 4 |
 
-**Serve it with thinking off.** The one-shot suites show reasoning costs ~13× the output
-tokens for +1.7 points, and blows the token budget outright at low caps. The agentic suite
-is the exception — there thinking cuts turns by a quarter at no accuracy cost — so if your
-workload is mostly tool loops, turn it back on:
+**Run it with thinking off.** On one-shot suites reasoning costs ~13x the output tokens
+for +1.7 points, and blows the budget outright at low caps.
+
+**Except for tool loops.** There thinking cuts turns by a quarter at no accuracy cost. If
+your workload is mostly agentic, add:
 
 ```
 --default-chat-template-kwargs '{"enable_thinking":true,"preserve_thinking":true}'
 ```
 
 Runner-up: `ornith-1.5-35b-a3b-nvfp4` — same accuracy at its best setting, 38 % fewer
-output tokens, but it collapses without its reasoning block and stalls more often.
+output tokens, but collapses without its reasoning block and stalls more often.
 
-## Why the tests are trustworthy
+## How it works
 
-Every task ships a **reference solution**. `./bench validate` runs all 28 of them against
-the same hidden tests the model will face. If it does not print `28/28`, the test is
-broken and no model score means anything. Run it first, every time.
+```mermaid
+graph LR
+    A[Your endpoint<br/>any OpenAI-compatible URL] --> B[bench run / sweep]
+    B --> C[Hidden executable tests<br/>+ workspace predicates]
+    C --> D[Ranked report<br/>with noise floor]
+    D --> E[bench apply --restart]
+    E --> A
+```
 
-Scoring is pass@1 over executable tests, not string matching and not an LLM judge: the
-model's largest fenced code block is extracted, the hidden tests are appended, and the
-program runs in a subprocess. It passes or it does not.
+A setup is three things at once, and they interact — the same weights score 60.7 % or
+80.4 % depending on one chat-template kwarg:
+
+```mermaid
+graph TD
+    S[One setup] --> C[Serving config<br/>weights, quantisation, vLLM flags]
+    S --> H[Harness<br/>built-in loop · pi · opencode · claude-code]
+    S --> T[Thinking mode<br/>on / off]
+```
+
+| Principle | What it means here |
+|---|---|
+| Measured where it runs | Any OpenAI-compatible endpoint, your hardware, your flags |
+| Both thinking modes, always | Separate rows — they are separate products |
+| Cost next to accuracy | Output tokens, wall-clock, turns, truncation all reported |
+| Two workload shapes | One-shot code generation and multi-turn tool calling disagree |
+| Your harness, your models | `bench harness models` lists what your pi/opencode can already reach |
+| The winner is installable | `bench apply <config> --restart` and you are serving it |
+| Nothing scored on vibes | Hidden unit tests, each proven passable by a reference solution |
+
+## Quick start
+
+Install:
+
+```bash
+pip install -e .
+```
+
+Point it at your endpoint:
+
+```bash
+export BENCH_BASE_URL=http://localhost:8001/v1 BENCH_MODEL=my-model
+```
+
+Prove the tests are passable before trusting any score:
+
+```bash
+./bench validate
+```
+
+Run a suite:
+
+```bash
+./bench run --suite all --thinking --max-tokens 16000 --label "my-model think-ON"
+```
+
+Build the report:
+
+```bash
+./bench report results/*/run-*.json --title "My model" --verdict "..."
+```
+
+`validate` must print `28/28` (and `--suite agentic-all` must print `16/16`). If it does
+not, the test is broken and no model score means anything.
+
+## What the campaigns found
+
+| Campaign | Question | Answer |
+|---|---|---|
+| [2026-08-17](results/2026-08-17-thinking-mode/) | Does thinking mode help a coding agent? | **No.** Thinking off: same or better pass@1, ~13x fewer output tokens, ~32x lower wall-clock |
+| [2026-08-18](results/2026-08-18-vllm-vs-ollama/) | vLLM vs ollama vs llama.cpp | vLLM wins from 3 concurrent clients up; prefix caching is off by default |
+| [2026-08-20](results/2026-08-20-ornith-vs-qwen3.6/) | Should Ornith-1.5-35B-A3B replace Qwen3.6-35B-A3B? | **No.** Ties at its best config, −20 points at the config we deploy |
+| [2026-08-20](results/2026-08-20-agentic-baseline/) | Can the winner drive a tool loop? | **Yes**, 16/16 in both modes. Thinking cuts turns 6.8 &rarr; 5.2 at no accuracy cost |
+| [2026-08-20](results/2026-08-20-agentic-hard/) | Can a harder suite separate configs that both look perfect? | **Yes**, 54.6 vs 50.1 — efficiency against oracle par is what separates them |
+| [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 built-in loop, 76.7 `claude-code`, 77.4 `pi`, 79.3 `opencode` |
+| [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `claude-code` 68.2, `opencode` 60.3, `pi` 55.0, built-in 44.9 — prefill spans ~16k to ~179k input tokens per task |
+
+The recurring lesson: benchmark both thinking modes on the workload you actually run.
+Reasoning-trained models collapse without their thinking block; non-reasoning models burn
+thousands of tokens with it. The right answer flips between one-shot generation and tool
+loops.
+
+## The suites
+
+| Suite | Tasks | What it covers |
+|---|---|---|
+| `core16` | 16 | Algorithms, data structures, parsing, Python idiom. **Saturated** — current models score 100 % |
+| `hard12` | 12 | Regex-matching DP, relaxed-JSON parser, Vixie-cron `next_run`, bigint long division, nestable transactions, tiny SQL evaluator, weighted interval scheduling, first-order unification. Models land at 45–75 % |
+| `all` | 28 | `core16` + `hard12` |
+| `agentic` | 8 | Multi-turn tool calling over a sandboxed workspace — 7 tools, scored by a predicate over the final state |
+| `agentic-hard` | 8 | **Ranking tasks.** Hidden tests, decoys, cascading bugs, perf budgets, cases where the correct move is to change nothing. Scored on agent score = solve rate x efficiency vs oracle par |
+| `agentic-all` | 16 | `agentic` + `agentic-hard` |
 
 ## Commands
 
@@ -103,25 +145,20 @@ program runs in a subprocess. It passes or it does not.
 | `./bench validate` | Prove every task's hidden tests are passable |
 | `./bench run` | Run a suite against an endpoint, write a result JSON |
 | `./bench report *.json` | Build a Markdown report with mermaid charts |
-| `./bench harness list` | Which coding harnesses are installed here (`pi`, `opencode`, `claude-code`) |
-| `./bench harness models` | Which models each of them can reach, from **your** config |
-| `./bench harness run --harness opencode -m <provider>/<model>` | Run a suite through a real harness, on a model you pick, instead of our tool loop |
-| `./bench configs` | List known-good serving configs |
+| `./bench harness list` | Which coding harnesses are installed here |
+| `./bench harness models` | Which models each can reach, from **your** config |
+| `./bench harness run --harness opencode -m <p>/<m>` | Run a suite through a real coding agent |
+| `./bench configs` | List serving recipes, and which are sweepable |
 | `./bench apply <name> [--restart]` | Install one as your live server config |
-| `./bench compare <model>...` | DGX box only: swap, run, restore, report — one command |
-| `./bench sweep --setup ...` | DGX box only: sweep serving config x harness x thinking mode and rank the *setups* |
+| `./bench compare <model>...` | DGX box only: swap, run, restore, report |
+| `./bench sweep --setup ...` | DGX box only: rank whole setups, not just models |
 
-Full walkthrough: **[docs/REPRODUCING.md](docs/REPRODUCING.md)**.
-Running this as an AI agent: **[AGENTS.md](AGENTS.md)** — a runbook with checks and guardrails.
-Benchmarking through your own coding agent: **[docs/HARNESSES.md](docs/HARNESSES.md)**.
-Where this is going: **[ROADMAP.md](ROADMAP.md)** — next up is benchmarking through the
-coding harness you actually use (pi, opencode, Claude Code, Codex), not just our tool loop.
+[Full walkthrough](docs/REPRODUCING.md) · [Agent runbook](AGENTS.md) · [Harnesses](docs/HARNESSES.md) · [Roadmap](ROADMAP.md)
 
 ## Sweeping setups, not just models
 
-A setup on your machine is three things at once: the serving config, the harness wrapped
-around the model, and whether thinking is on. `bench compare` sweeps only the model.
-`bench sweep` takes an explicit matrix of setups and ranks them:
+`bench compare` sweeps the model. `bench sweep` takes an explicit matrix of setups and
+ranks them:
 
 ```bash
 ./bench sweep --suite agentic-hard --title "27B dense vs 35B MoE" \
@@ -131,50 +168,89 @@ around the model, and whether thinking is on. `bench compare` sweeps only the mo
   --dry-run
 ```
 
-Four things worth knowing before you drop the `--dry-run`:
+| Behaviour | Detail |
+|---|---|
+| Explicit matrix | Each `--setup` is one real combination; only `thinking=both` expands |
+| One restart per config | Setups are grouped, so six setups over two configs restart twice |
+| Every restart is gated | Refuses without `--yes-restart-endpoint`, and refuses outright when it cannot ask |
+| Launcher restored | On success and on failure; a failing restore is reported, never buried |
+| Ranked within a block | One harness, one thinking mode — a cross-harness winner would be reporting the harness |
 
-- **The matrix is explicit, never a cross-product.** Independent `--configs`/`--harnesses`
-  flags would multiply into combinations that cannot exist. Each `--setup` is one real
-  combination; `thinking=both` is the only expansion, because thinking and non-thinking are
-  two products, not one row.
-- **One restart per serving config, not per setup.** Setups are grouped by config, so a
-  six-setup sweep over two configs restarts the endpoint twice.
-- **Every restart is gated.** Without `--yes-restart-endpoint` a sweep that would restart a
-  shared endpoint asks first, and refuses outright when it cannot ask. Dropping `config=`
-  from every setup sweeps the harness and thinking axes against whatever is already serving,
-  and never touches the launcher. There is deliberately no "swap but do not restart" mode:
-  it would measure the previous config and file the result under the new one's name.
-- **The launcher you started with is put back** — on success and on failure, and a failing
-  restore is reported rather than allowed to bury the error that caused it.
+Drop `config=` from every setup to sweep the harness and thinking axes against whatever is
+already serving, without touching the launcher.
 
-The report ranks setups *within* one harness and one thinking mode and nowhere else: the
-same weights score 67.4 through the built-in loop and 79.3 through opencode here, so a
-single cross-harness "winner" would be reporting the harness. Each block names its own
-winner and says whether the margin clears the noise floor for the sample count used (~8
-points at `--samples 2`, scaled by 1/sqrt(n) above that).
+<details>
+<summary>Why the ranking never crosses harnesses, and how noise is handled</summary>
 
-The ranking is rebuildable from the result files alone — `./bench report <dir>/*.json
---setups` regenerates it without re-running anything, so a sweep that finished but tripped
-over its report is not lost.
+The same weights score 67.4 through the built-in loop and 79.3 through opencode here, so a
+single cross-harness "winner" would be reporting the harness rather than the setup. Each
+block names its own winner and says whether the margin clears the noise floor for the
+sample count used — about 8 points at `--samples 2`, scaled by 1/sqrt(n) above that.
 
-Not every recipe in `configs/` can be swept — `bench configs` marks the ones that cannot and
-says why (a llama.cpp script, a standalone tunable server, a secondary backend on its own
-unit are all fine recipes, just not drivable by the `vllm-qwen` systemd machinery).
+The ranking is rebuildable from the result files alone:
 
-## The suites
+```bash
+./bench report <dir>/*.json --setups
+```
 
-| Suite | Tasks | What it covers |
-|---|---|---|
-| `core16` | 16 | Algorithms, data structures, parsing, Python idiom. **Saturated** — current models score 100 % |
-| `hard12` | 12 | Written when `core16` stopped discriminating: regex-matching DP, a relaxed-JSON parser, Vixie-cron `next_run`, bigint long division, nestable transactions, a tiny SQL evaluator, weighted interval scheduling, first-order unification. Current models land at 45–75 % |
-| `all` | 28 | Both of the above |
-| `agentic-hard` | 8 | **Ranking tasks.** Hidden tests the model never sees, decoys that fail the task if touched, cascading bugs, a performance budget, generalisation to an unseen input, and cases where the correct move is to change nothing. Scored on an **agent score** = solve rate x efficiency against oracle par |
-| `agentic` | 8 | **Multi-turn tool calling.** The model drives a sandboxed workspace through 7 tools — list, read, write, edit, search, run, finish — to reach a goal state: fix a failing test, rename a symbol across files, find a bug by searching, recover from a bad path, implement from a spec, decline to change working code. Scored by a predicate over the final workspace, never by what the model claims |
+A sweep that finished but tripped over its report is not lost.
+
+There is deliberately no "swap but do not restart" mode: it would measure the previous
+config and file the result under the new one's name.
+
+Not every recipe in `configs/` can be swept. `bench configs` marks the ones that cannot and
+says why — a llama.cpp script, a standalone tunable server, and a secondary backend on its
+own systemd unit are all fine recipes, just not drivable by the `vllm-qwen` machinery.
+
+</details>
+
+<details>
+<summary>Why the tests are trustworthy</summary>
+
+Every task ships a **reference solution**. `./bench validate` runs all 28 of them against
+the same hidden tests the model will face. If it does not print `28/28`, the test is broken
+and no model score means anything. Run it first, every time.
+
+Scoring is pass@1 over executable tests, not string matching and not an LLM judge: the
+model's largest fenced code block is extracted, the hidden tests are appended, and the
+program runs in a subprocess. It passes or it does not.
+
+The agentic suites are scored by a predicate over the final workspace state, never by what
+the model claims it did.
 
 When `hard12` saturates too, write the next one — see
 [adding tasks](docs/REPRODUCING.md#adding-tasks-and-suites).
 
-## Serving configs you can adopt
+</details>
+
+<details>
+<summary>Why machine-local benchmarking, in full</summary>
+
+Public benchmarks rank *models* on hardware you don't have, at settings you won't use.
+This one answers a narrower and more useful question: of the things you could actually
+serve on this box, which exact configuration should you run every day?
+
+The answer is machine-local, and that is the point. The best setup for user A is routinely
+the wrong one for user B — different GPU, different memory ceiling, different quantisation
+available, different concurrency, different work. A published score cannot know any of
+that. Running the suite on your own endpoint can.
+
+A configuration is more than a model name — it's the model, the quantisation, the serving
+flags, and the thinking mode, together. Those interact: the same weights score 60.7 % or
+80.4 % on the same suite depending on one chat-template kwarg, and the right answer flips
+between one-shot coding and tool loops.
+
+The same model scores 12 points apart through four different tool loops, so the suites also
+run through the coding agent you actually use (`pi`, `opencode`, `claude-code`). A model
+your editor does not know about is reachable with `--endpoint <url>` on any of the three
+harnesses. Nothing is written to your editor's configuration either way.
+
+Built and used on an **NVIDIA DGX Spark (GB10)**, but the harness itself only needs a URL.
+
+</details>
+
+<details>
+<summary>Serving configs you can adopt</summary>
 
 [`configs/`](configs/) holds complete, benchmarked `vllm serve` recipes. Install one and
 you have a server:
@@ -184,28 +260,13 @@ you have a server:
 ```
 
 Each recipe is listed with its measured pass@1 and throughput, and the reasons its flags
-are the way they are (MoE backends, MTP weight requirements, how the memory fraction is
-computed). Architecture, ports and rollback: [SERVING.md](SERVING.md).
+are the way they are — MoE backends, MTP weight requirements, how the memory fraction is
+computed. Architecture, ports and rollback: [SERVING.md](SERVING.md).
 
-## Findings so far
+</details>
 
-| Campaign | Question | Answer |
-|---|---|---|
-| [2026-08-17](results/2026-08-17-thinking-mode/) | Does thinking mode help a coding agent? | **No.** Thinking off: same or better pass@1, ~13× fewer output tokens, ~32× lower wall-clock |
-| [2026-08-18](results/2026-08-18-vllm-vs-ollama/) | vLLM vs ollama vs llama.cpp | vLLM wins from 3 concurrent clients up; prefix caching is off by default |
-| [2026-08-20](results/2026-08-20-ornith-vs-qwen3.6/) | Should Ornith-1.5-35B-A3B replace Qwen3.6-35B-A3B? | **No.** Ties at its best config, −20 points at the config we deploy |
-| [2026-08-20](results/2026-08-20-agentic-baseline/) | Can the winner drive a tool loop, and does thinking help there? | **Yes**, 16/16 in both modes — the suite is a floor, not a ranking. Thinking cuts turns 6.8 → 5.2 at no accuracy cost |
-| [2026-08-20](results/2026-08-20-agentic-hard/) | Can a harder agentic suite separate configs that both look perfect? | **Yes**, 54.6 vs 50.1. Solve rate still nearly ties; efficiency against oracle par is what separates them |
-| [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 through our loop, 76.7 through `claude-code`, 77.4 through `pi`, 79.3 through `opencode`. All solve 100 %, so the top three are tied — the real spread is prefill |
-| [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `claude-code` 68.2, `opencode` 60.3, `pi` 55.0, our loop 44.9 — top two tied inside noise, but the prefill spread is not: ~16k vs ~119k vs ~179k input tokens per task |
-
-The recurring lesson: **always benchmark both thinking modes, on the workload you actually
-run.** Reasoning-trained models collapse without their thinking block; non-reasoning models
-burn thousands of tokens with it — and the right answer flips between one-shot generation
-(thinking off) and multi-turn tool loops (thinking on). Testing one mode, or one workload
-shape, will tell you the wrong thing.
-
-## Layout
+<details>
+<summary>Repository layout</summary>
 
 ```
 bench                  CLI entry point
@@ -217,6 +278,7 @@ benchkit/              the harness
   runner.py            generation, sandboxed test execution, scoring
   report.py            Markdown + mermaid report generator
   serving.py           optional: swap and restart the local vLLM service
+  sweep.py             the setup matrix: grouping, approval gate, launcher restore
 configs/               benchmarked, ready-to-run serving recipes
 results/               one dated directory per campaign: raw JSON, logs, REPORT.md
 AGENTS.md              runbook for an AI agent driving the whole thing
@@ -230,6 +292,16 @@ router.py              OpenAI-compatible router fronting multiple vLLM backends
 Results directories are append-only: a superseded campaign stays next to the one that
 replaced it. Model weights and torch-compile caches are gitignored.
 
-## Licence
+</details>
 
-MIT — see [LICENSE](LICENSE).
+## Get started
+
+```bash
+pip install -e .
+```
+
+```bash
+./bench validate
+```
+
+[**Reproduce a campaign &rarr;**](docs/REPRODUCING.md) · [**Benchmark through your own agent &rarr;**](docs/HARNESSES.md) · [MIT licensed](LICENSE)
