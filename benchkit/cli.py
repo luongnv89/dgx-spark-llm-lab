@@ -15,6 +15,22 @@ from benchkit.suites import SUITES, DESCRIPTIONS, get, kind  # noqa: E402
 RESULTS = os.path.join(HERE, "results")
 
 
+def _confirm_restart(unit: str, model_id: str, yes: bool) -> None:
+    """Prompt for confirmation before restarting a shared endpoint.
+
+    The guardrail from AGENTS.md:129 — "Never restart a shared serving
+    endpoint without explicit human approval" — is enforced here.
+    """
+    if yes:
+        return
+    answer = input(
+        f"\n⚠ This will restart unit {unit!r} and serve {model_id!r}. "
+        f"Continue? [y/N] "
+    )
+    if answer.strip().lower() != "y":
+        raise SystemExit("restart declined — no changes made")
+
+
 def _print_agentic(r):
     mark = "PASS" if r["passed"] else "FAIL"
     print(f"  {mark}  {r['task']:<24} s{r['sample']} "
@@ -98,6 +114,7 @@ def cmd_run(args):
                                       keep_code=args.keep_code)
 
     out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
+    out = _ensure_unique_path(out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
         json.dump(dict(summary=summary, results=results), f, indent=2)
@@ -153,6 +170,7 @@ def cmd_compare(args):
     try:
         for model_id in args.models:
             print(f"\n=== swapping to {model_id} ===", flush=True)
+            _confirm_restart(serving.UNIT, model_id, args.yes)
             serving.swap_to(model_id)
             for thinking in ([False, True] if args.both_modes else [args.thinking]):
                 label = f"{model_id.split('/')[-1]} think-{'ON' if thinking else 'OFF'}"
@@ -386,6 +404,7 @@ def cmd_harness(args):
     summary, results = hrunner.run(h, tasks, cfg, on_result=_print_agentic,
                                    timeout=args.timeout, keep_dirs=args.keep_dirs)
     out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
+    out = _ensure_unique_path(out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
         json.dump(dict(summary=summary, results=results), f, indent=2)
@@ -442,6 +461,7 @@ def cmd_apply(args):
     print(f"installed {os.path.relpath(path, HERE)} -> start-qwen.sh")
     print(f"  model: {prev} -> {model_id}")
     if args.restart:
+        _confirm_restart(serving.UNIT, model_id, args.yes)
         print("restarting the service; engine init takes several minutes...")
         serving.restart()
         print("endpoint healthy")
@@ -461,6 +481,24 @@ def _stamp():
 
 def _slug(s):
     return "".join(c if c.isalnum() or c in "-_" else "-" for c in s.lower()).strip("-")
+
+
+def _ensure_unique_path(path: str) -> str:
+    """Return a path that does not overwrite an existing result file.
+
+    If *path* already exists, suffix with a counter (e.g. ``.1``, ``.2``)
+    until we find a free name. This enforces the append-only rule from
+    AGENTS.md and prevents two runs from silently overwriting each other.
+    """
+    if not os.path.exists(path):
+        return path
+    base, ext = os.path.splitext(path)
+    i = 1
+    while True:
+        candidate = f"{base}.{i}{ext}"
+        if not os.path.exists(candidate):
+            return candidate
+        i += 1
 
 
 def main(argv=None):
@@ -525,6 +563,8 @@ def main(argv=None):
                    help="agentic suite: tool-calling turns before the task is abandoned")
     s.add_argument("--no-restore", dest="restore", action="store_false",
                    help="leave the last model serving instead of restoring the original")
+    s.add_argument("--yes", action="store_true",
+                   help="skip the restart confirmation prompt")
     s.set_defaults(func=cmd_compare)
 
     s = sub.add_parser("sweep",
@@ -595,6 +635,8 @@ def main(argv=None):
     s.add_argument("name", help="config name from `bench configs`")
     s.add_argument("--restart", action="store_true",
                    help="restart the vLLM service and wait until it serves")
+    s.add_argument("--yes", action="store_true",
+                   help="skip the restart confirmation prompt")
     s.set_defaults(func=cmd_apply)
 
     argv = sys.argv[1:] if argv is None else list(argv)
