@@ -14,7 +14,7 @@
 set -euo pipefail
 
 MODEL_ID="unsloth/Qwen3.6-35B-A3B-NVFP4"
-IMAGE="ghcr.io/miaai-lab/mia-vllm-gb10-linear-b12x:latest"
+IMAGE="ghcr.io/miaai-lab/mia-vllm-gb10-linear-b12x@sha256:19627342e1da2607f4db50745dca30e57d7dd0ebff06062f03fd69b43a252931"
 NAME="vllm-qwen"
 PORT="${QWEN_PORT:-8801}"
 # 0.62 of the 119 GB unified pool (~74 GB): weights 24.8 GB + ~45 GB KV.

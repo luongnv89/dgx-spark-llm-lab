@@ -5,7 +5,7 @@
 #
 # Scoped to the gemma backend on purpose: the Qwen NVFP4 container keeps
 # running the untouched upstream image.
-FROM ghcr.io/miaai-lab/mia-vllm-gb10-linear-b12x:latest
+FROM ghcr.io/miaai-lab/mia-vllm-gb10-linear-b12x@sha256:19627342e1da2607f4db50745dca30e57d7dd0ebff06062f03fd69b43a252931
 
 # torch/flashinfer are pinned to this image's CUDA 13 arm64 build -- never let
 # a transitive resolve swap them out.
