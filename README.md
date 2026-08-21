@@ -142,14 +142,16 @@ Four things worth knowing before you drop the `--dry-run`:
 - **Every restart is gated.** Without `--yes-restart-endpoint` a sweep that would restart a
   shared endpoint asks first, and refuses outright when it cannot ask. Dropping `config=`
   from every setup sweeps the harness and thinking axes against whatever is already serving,
-  and never touches the launcher.
+  and never touches the launcher. There is deliberately no "swap but do not restart" mode:
+  it would measure the previous config and file the result under the new one's name.
 - **The launcher you started with is put back** — on success and on failure, and a failing
   restore is reported rather than allowed to bury the error that caused it.
 
 The report ranks setups *within* one harness and one thinking mode and nowhere else: the
 same weights score 67.4 through the built-in loop and 79.3 through opencode here, so a
 single cross-harness "winner" would be reporting the harness. Each block names its own
-winner and says whether the margin clears the ~8-point noise floor for the sample count used.
+winner and says whether the margin clears the noise floor for the sample count used (~8
+points at `--samples 2`, scaled by 1/sqrt(n) above that).
 
 Not every recipe in `configs/` can be swept — `bench configs` marks the ones that cannot and
 says why (a llama.cpp script, a standalone tunable server, a secondary backend on its own

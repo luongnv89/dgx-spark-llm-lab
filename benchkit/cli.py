@@ -185,6 +185,22 @@ def cmd_compare(args):
     return 0
 
 
+def _sweep_model(args, setup):
+    """Resolve one harness setup's model spec, as a user error not a traceback.
+
+    Called once up front for the whole matrix as well as at run time, so a typo
+    is answered before the first endpoint restart rather than after it.
+    """
+    from benchkit.harness import models as hmodels
+    spec = setup.model or args.model
+    try:
+        # in endpoint mode the id is whatever the server reports, so it is taken
+        # literally; there is no catalogue to match against
+        return hmodels.resolve(spec, [])
+    except hmodels.ModelSpecError as e:
+        raise SystemExit(f"setup {setup.resolved_label(args.model)!r}: {e}") from e
+
+
 def _sweep_execute(args, setup, label):
     """Run one setup row and return its (summary, results).
 
@@ -205,7 +221,6 @@ def _sweep_execute(args, setup, label):
         return _execute_suite(args.suite, tasks, cfg, max_turns=args.max_turns)
 
     from benchkit import harness as H
-    from benchkit.harness import models as hmodels
     from benchkit.harness import runner as hrunner
 
     if kind(args.suite) != "agentic":
@@ -214,8 +229,7 @@ def _sweep_execute(args, setup, label):
     # A sweep exists to measure *this* endpoint, so a harness in a sweep is
     # always pointed at it rather than at its own configured providers.
     endpoint = args.endpoint or args.base_url
-    spec = setup.model or args.model
-    provider, model = hmodels.resolve(spec, [])
+    provider, model = _sweep_model(args, setup)
     h = H.get(setup.harness, provider=provider, model=model, base_url=endpoint)
     ok, detail = h.available()
     if not ok:
@@ -251,18 +265,29 @@ def cmd_sweep(args):
                   "(or pass --yes-restart-endpoint)")
         return 0
 
+    S.check_sweepable(setups, serving)
+    for setup in setups:
+        if setup.harness:
+            _sweep_model(args, setup)
+
     outdir = os.path.join(RESULTS, f"{_stamp()}-{_slug(args.title)}")
+    out = os.path.join(outdir, "REPORT.md")
+    if os.path.exists(out):
+        # results/ is append-only, and _stamp() is day-granular: a second sweep
+        # with the same title on the same day would silently bury the first
+        # campaign's report while orphaning its result files.
+        raise SystemExit(f"refusing to overwrite an existing report: {out}\n"
+                         "Give this sweep a different --title.")
     print(f"suite={args.suite}  {len(setups)} setups  results -> {outdir}\n")
 
     paths = S.run_sweep(
         setups, outdir,
         execute=lambda setup, label: _sweep_execute(args, setup, label),
         serving=serving, assume_yes=args.yes_restart_endpoint,
-        restart=args.restart, default_model=args.model)
+        default_model=args.model)
 
     md = report.build([report.load(p) for p in paths], title=args.title,
                       question=args.question, setups=True)
-    out = os.path.join(outdir, "REPORT.md")
     with open(out, "w") as f:
         f.write(md)
     print(f"\nreport written to {out}")
@@ -376,10 +401,11 @@ def cmd_configs(args):
     for name, model_id, _ in ok:
         mark = " (active model)" if model_id == active else ""
         print(f"{name:<34} {model_id}{mark}")
-    for name, reason in skipped:
+    for name, model_id, reason in skipped:
         # still a known-good recipe, just not one `bench sweep` can install and
         # restart -- say why here rather than crashing halfway through a sweep.
-        print(f"{name:<34} not sweepable: {reason}")
+        mark = " (active model)" if model_id == active else ""
+        print(f"{name:<34} {model_id}{mark}\n{'':<34} not sweepable: {reason}")
     return 0
 
 
@@ -499,9 +525,6 @@ def main(argv=None):
                         "serving config in the matrix. Without it a sweep that "
                         "needs a restart refuses to start (CLAUDE.md: never "
                         "restart a shared endpoint without explicit approval).")
-    s.add_argument("--no-restart", dest="restart", action="store_false",
-                   help="install each config without restarting the service — "
-                        "for rehearsing a sweep, not for measuring one")
     s.add_argument("--dry-run", action="store_true",
                    help="print the matrix and the restart plan, run nothing")
     s.set_defaults(func=cmd_sweep)

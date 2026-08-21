@@ -119,14 +119,19 @@ def parse_setups(specs, known_harnesses=(), default_model=""):
             if s.harness and s.harness not in known_harnesses:
                 raise SystemExit(f"unknown harness {s.harness!r} in --setup; have: "
                                  + ", ".join(known_harnesses))
-    seen = {}
+    seen_keys, seen_slugs = set(), set()
     for s in setups:
         key = (s.config, s.harness, s.model, s.thinking)
         label = s.resolved_label(default_model)
-        if key in seen or label in seen.values():
+        # dedupe on the *slug*, because that is what becomes the filename: two
+        # labels that differ only in punctuation would otherwise collide hours
+        # into a sweep, after a restart nobody can take back.
+        slug = _slug(label)
+        if key in seen_keys or slug in seen_slugs:
             raise SystemExit(f"duplicate setup {label!r}: two rows of a sweep would "
                              "write the same result file. Give one of them label=...")
-        seen[key] = label
+        seen_keys.add(key)
+        seen_slugs.add(slug)
     return setups
 
 
@@ -162,7 +167,7 @@ def check_sweepable(setups, serving):
     """
     ok, skipped = serving.sweepable_configs()
     names = {n for n, _, _ in ok}
-    reasons = dict(skipped)
+    reasons = {n: why for n, _, why in skipped}
     bad = []
     for c in configs_needing_swap(setups):
         if c in names:
@@ -281,12 +286,25 @@ def run_sweep(setups, outdir, execute, serving, assume_yes=False, restart=True,
     `execute(setup, label)` runs one row and returns `(summary, results)`; the
     caller owns how a row is run so this function stays testable without an
     endpoint. Returns the list of result files written, in run order.
+
+    `restart=False` is only meaningful for a matrix that swaps no config at all
+    -- see the guard below.
     """
     import json
 
     check_sweepable(setups, serving)
     groups = group_by_config(setups)
     swaps = [c for c, _ in groups if c]
+    if swaps and not restart:
+        # Installing a recipe without restarting leaves the endpoint serving the
+        # *previous* config while every result file claims the new one. Those
+        # files would then be indelible: results/ is append-only.
+        raise SystemExit(
+            "a setup naming config= cannot run without restarting the endpoint: "
+            "the launcher would change but the endpoint would keep serving the "
+            "previous config, and every result file would name the wrong one.\n"
+            "Use --dry-run to rehearse the matrix, or drop config= to measure "
+            "whatever is already serving.")
     approve_restart(swaps, assume_yes=assume_yes, stdin=stdin, stdout=stdout, log=log)
 
     os.makedirs(outdir, exist_ok=True)

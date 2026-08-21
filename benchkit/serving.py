@@ -108,11 +108,18 @@ def sweepable(src, unit=UNIT):
 
 
 def sweepable_configs(configs=CONFIGS, unit=UNIT):
-    """([(name, model_id, path), ...], [(name, reason), ...]) — usable, skipped."""
+    """([(name, model_id, path), ...], [(name, model_id, reason), ...]).
+
+    A skipped recipe keeps its model id: it is still a known-good config that
+    `bench configs` must list in full, just not one this module can install and
+    restart.
+    """
     ok, skipped = [], []
     for name, model_id, path in list_configs(configs):
         with open(path) as f:
             good, reason = sweepable(f.read(), unit=unit)
-        (ok if good else skipped).append(
-            (name, model_id, path) if good else (name, reason))
+        if good:
+            ok.append((name, model_id, path))
+        else:
+            skipped.append((name, model_id, reason))
     return ok, skipped

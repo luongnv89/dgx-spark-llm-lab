@@ -26,7 +26,7 @@ jobs:
         run: uv run mypy benchkit router.py --ignore-missing-imports
 
       - name: Run unit tests with coverage
-        run: uv run coverage run --source=benchkit --parallel-mode -m unittest discover -s tests -t tests
+        run: uv run coverage run --source=benchkit --parallel-mode -m unittest discover -s tests -t .
 
       - name: Run bench validate with coverage
         run: uv run coverage run --source=benchkit --parallel-mode -m benchkit.cli validate

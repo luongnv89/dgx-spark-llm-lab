@@ -9,8 +9,9 @@ import os
 
 BAR = "xychart-beta"
 
-#: at 2 samples per task, anything under this many points is noise, not signal
+#: CLAUDE.md's noise floor, calibrated at 2 samples per task
 NOISE_POINTS = 8.0
+NOISE_SAMPLES = 2
 
 #: what a run that used benchkit's own tool loop, rather than a harness, is called
 BUILTIN_HARNESS = "built-in loop"
@@ -83,21 +84,29 @@ def _setup_of(run):
     )
 
 
-def _score_of(summary):
-    """(value, metric-name) — agent score where it exists, else pass@1."""
-    if summary.get("agent_score") is not None:
-        return summary["agent_score"] * 100, "Agent score"
-    return (summary.get("pass_at_1") or 0) * 100, "pass@1"
+def noise_floor(samples):
+    """Points below which a difference is noise, for this many samples per task.
+
+    CLAUDE.md fixes the floor at ~8 points at `--samples 2`. Sampling error
+    shrinks as 1/sqrt(n), so quoting that same 8 points beside a 10-sample run
+    would be pessimistic, and quoting it beside a 1-sample run would be a lie.
+    The scaled figure is still an approximation, and it is named as one.
+    """
+    try:
+        n = max(1, int(samples or NOISE_SAMPLES))
+    except (TypeError, ValueError):
+        n = NOISE_SAMPLES
+    return NOISE_POINTS * (NOISE_SAMPLES / n) ** 0.5
 
 
 def rank_setups(runs, labels):
     """Markdown ranking setups *within* a comparable block, never across them.
 
     A block is one harness in one thinking mode. That boundary is not
-    fastidiousness: this repo's own README records 67.4 through the built-in
-    loop against 79.3 through opencode on identical weights, so a table that
-    ranks an opencode row above a built-in-loop row is reporting the harness,
-    not the setup. Thinking and non-thinking are likewise two products, never
+    fastidiousness: this repo's own harness-spread campaign in `results/`
+    records a swing on identical weights as large as a model change, so a table
+    that ranks an opencode row above a built-in-loop row is reporting the
+    harness, not the setup. Thinking and non-thinking are likewise two products, never
     two candidates for one crown. Inside a block the serving config and the
     model are the axes actually being compared, and there the winner is real --
     subject to the sample-count noise floor, which every block states.
@@ -111,47 +120,53 @@ def rank_setups(runs, labels):
     out = ["## Ranked setups\n"]
     out.append("A setup is the serving config, the harness and the thinking mode "
                "together. Scores are ranked **within** one harness and one thinking "
-               "mode and nowhere else: the same weights score differently through "
-               "different harnesses (67.4 through the built-in loop against 79.3 "
-               "through opencode, in this repo's own results), and thinking and "
-               "non-thinking are two products, not two candidates. There is "
-               "deliberately no single cross-harness winner below.\n")
+               "mode and nowhere else: identical weights score materially "
+               "differently through different harnesses — see the harness-spread "
+               "campaign in `results/` — and thinking and non-thinking are two "
+               "products, not two candidates. There is deliberately no single "
+               "cross-harness winner below.\n")
 
     for (harness, thinking), idx in blocks.items():
-        metric = "Agent score" if all(S[i].get("agent_score") is not None
-                                      for i in idx) else "pass@1"
-        scored = sorted(idx, key=lambda i: -_score_of(S[i])[0])
+        # One metric decides the whole block. A block where any run predates
+        # oracle-par efficiency falls back to pass@1 for *every* row, so the
+        # ranking, the cells and the margin can never quote different rulers.
+        agentic = all(S[i].get("agent_score") is not None for i in idx)
+        metric = "Agent score" if agentic else "pass@1"
+
+        def value(i, agentic=agentic):
+            key = "agent_score" if agentic else "pass_at_1"
+            return (S[i].get(key) or 0) * 100
+
+        ranked = sorted(idx, key=lambda i: -value(i))
         out.append(f"### {harness} · thinking {'ON' if thinking else 'OFF'}\n")
         out.append(f"| Rank | Serving config | Model | {metric} | Samples |\n"
                    "|---|---|---|---|---|")
-        for rank, i in enumerate(scored, 1):
+        for rank, i in enumerate(ranked, 1):
             st = setups[i]
-            value = (_score_of(S[i])[0] if metric == "Agent score"
-                     else (S[i].get("pass_at_1") or 0) * 100)
-            cell = f"**{value:.1f}**" if rank == 1 else f"{value:.1f}"
+            cell = f"**{value(i):.1f}**" if rank == 1 else f"{value(i):.1f}"
             name = f"**{labels[i]}**" if rank == 1 else labels[i]
             out.append(f"| {rank} | `{st['config']}` | {st['model']} — {name} "
                        f"| {cell} | {st['samples']} |")
         out.append("")
-        best = scored[0]
-        best_v = _score_of(S[best])[0]
+        best = ranked[0]
         samples = setups[best]["samples"]
-        if len(scored) == 1:
+        if len(ranked) == 1:
             out.append(f"**Winner: {labels[best]}** — the only setup in this block, "
                        "so this is a measurement, not a comparison.\n")
             continue
-        runner_up = scored[1]
-        margin = best_v - _score_of(S[runner_up])[0]
-        verdict = (f"**Winner: {labels[best]}** — {best_v:.1f} against "
-                   f"{_score_of(S[runner_up])[0]:.1f} for {labels[runner_up]}, "
+        runner_up = ranked[1]
+        margin = value(best) - value(runner_up)
+        floor = noise_floor(samples)
+        verdict = (f"**Winner: {labels[best]}** — {value(best):.1f} against "
+                   f"{value(runner_up):.1f} for {labels[runner_up]}, "
                    f"a margin of {margin:.1f} points. ")
-        if margin < NOISE_POINTS:
-            verdict += (f"That is **inside the ~{NOISE_POINTS:.0f}-point noise floor** at "
-                        f"{samples} samples per task — treat it as a tie and re-run "
-                        "with more samples before acting on it.")
+        scale = (f"~{floor:.1f} points at {samples} samples per task "
+                 f"(~{NOISE_POINTS:.0f} at {NOISE_SAMPLES}, scaled by 1/sqrt(n))")
+        if margin < floor:
+            verdict += (f"That is **inside the noise floor** of {scale} — treat it as "
+                        "a tie and re-run with more samples before acting on it.")
         else:
-            verdict += (f"That clears the ~{NOISE_POINTS:.0f}-point noise floor at "
-                        f"{samples} samples per task.")
+            verdict += f"That clears the noise floor of {scale}."
         out.append(verdict + "\n")
     return "\n".join(out)
 

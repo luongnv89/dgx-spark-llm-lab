@@ -54,7 +54,7 @@ class FakeServing:
 
     def sweepable_configs(self):
         ok = [(n, f"org/{n}", f"/configs/{n}.sh") for n in self._sweepable]
-        return ok, [("llamacpp-qwen3.8-27b-bench", "not a vLLM recipe")]
+        return ok, [("llamacpp-qwen3.8-27b-bench", "?", "not a vLLM recipe")]
 
     def apply_config(self, name):
         self.applied.append(name)
@@ -146,7 +146,9 @@ class Sweepability(unittest.TestCase):
         names = {n for n, _, _ in ok}
         self.assertIn("qwen3.6-35b-a3b-nvfp4", names)
         self.assertIn("qwen3.8-27b-nvfp4-dspark", names)
-        self.assertIn("llamacpp-qwen3.8-27b-bench", dict(skipped))
+        self.assertIn("llamacpp-qwen3.8-27b-bench", {n for n, _, _ in skipped})
+        # a skipped recipe keeps its model id so `bench configs` stays complete
+        self.assertEqual(len(skipped[0]), 3)
 
     def test_naming_an_undrivable_config_fails_before_any_restart(self):
         tmp = tempfile.mkdtemp()
@@ -190,7 +192,8 @@ class ApprovalGate(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp)
         srv = FakeServing(tmp)
-        before = open(srv.LAUNCHER).read()
+        with open(srv.LAUNCHER) as f:
+            before = f.read()
         out = os.path.join(tmp, "results")
         with self.assertRaises(SystemExit):
             sweep.run_sweep(sweep.parse_setup("config=cfg-a"), out,
@@ -199,7 +202,8 @@ class ApprovalGate(unittest.TestCase):
                             stdout=io.StringIO(), log=lambda *a: None)
         self.assertEqual(srv.applied, [])
         self.assertEqual(srv.restarts, 0)
-        self.assertEqual(open(srv.LAUNCHER).read(), before)
+        with open(srv.LAUNCHER) as f:
+            self.assertEqual(f.read(), before)
         self.assertFalse(os.path.exists(out) and os.listdir(out))
 
 
@@ -209,7 +213,8 @@ class RunSweep(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp)
         self.out = os.path.join(self.tmp, "results")
         self.srv = FakeServing(self.tmp)
-        self.original = open(self.srv.LAUNCHER).read()
+        with open(self.srv.LAUNCHER) as f:
+            self.original = f.read()
 
     def _run(self, setups, **kw):
         calls = []
@@ -247,7 +252,8 @@ class RunSweep(unittest.TestCase):
 
     def test_original_launcher_is_restored_on_success(self):
         self._run(sweep.parse_setup("config=cfg-a"))
-        self.assertEqual(open(self.srv.LAUNCHER).read(), self.original)
+        with open(self.srv.LAUNCHER) as f:
+            self.assertEqual(f.read(), self.original)
 
     def test_original_launcher_is_restored_on_failure(self):
         def boom(setup, label):
@@ -259,7 +265,8 @@ class RunSweep(unittest.TestCase):
                             log=lambda *a: None)
         # the *original* exception survives, unmasked by the restore
         self.assertEqual(str(e.exception), "the run itself failed")
-        self.assertEqual(open(self.srv.LAUNCHER).read(), self.original)
+        with open(self.srv.LAUNCHER) as f:
+            self.assertEqual(f.read(), self.original)
 
     def test_a_failing_restore_never_masks_the_original_exception(self):
         srv = FakeServing(self.tmp, fail_restore=True)
@@ -341,7 +348,29 @@ class RankedReport(unittest.TestCase):
         runs = self._runs(("a", "cfg-a", "", False, 0.40),
                           ("b", "cfg-b", "", False, 0.70))
         md = report.rank_setups(runs, ["a", "b"])
-        self.assertIn("clears the ~8-point noise floor", md)
+        self.assertIn("clears the noise floor", md)
+        self.assertIn("~8.0 points at 2 samples per task", md)
+
+    def test_the_noise_floor_shrinks_with_the_sample_count(self):
+        self.assertEqual(report.noise_floor(2), report.NOISE_POINTS)
+        self.assertLess(report.noise_floor(8), report.NOISE_POINTS)
+        self.assertGreater(report.noise_floor(1), report.NOISE_POINTS)
+        # a result file with no recorded sample count falls back, never crashes
+        self.assertEqual(report.noise_floor(None), report.NOISE_POINTS)
+
+    def test_a_block_mixing_scored_and_unscored_runs_uses_one_ruler(self):
+        """A table must never rank on a metric its own cells do not show."""
+        runs = self._runs(("a", "cfg-a", "", False, 0.90),
+                          ("b", "cfg-b", "", False, 0.10))
+        runs[0]["summary"]["agent_score"] = None      # predates oracle-par
+        runs[0]["summary"]["pass_at_1"] = 0.10
+        runs[1]["summary"]["pass_at_1"] = 0.80
+        md = report.rank_setups(runs, ["a", "b"])
+        self.assertIn("| pass@1 |", md)
+        self.assertNotIn("Agent score", md)
+        # ranked on pass@1, so b wins and the quoted figures are pass@1 figures
+        self.assertIn("Winner: b", md)
+        self.assertIn("80.0 against 10.0", md)
 
     def test_every_row_names_its_serving_config_and_harness(self):
         runs = self._runs(("a", "cfg-a", "opencode", False, 0.4))
@@ -356,6 +385,34 @@ class RankedReport(unittest.TestCase):
         self.assertIn("## Ranked setups", md)
         self.assertNotIn("## Ranked setups",
                          report.build(runs, title="t"))
+
+
+class NoRestartIsRefused(unittest.TestCase):
+    """Swapping a config without restarting would file a lie in append-only results/."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.srv = FakeServing(self.tmp)
+
+    def test_a_config_swap_without_a_restart_is_refused(self):
+        with self.assertRaises(SystemExit) as e:
+            sweep.run_sweep(sweep.parse_setup("config=cfg-a"),
+                            os.path.join(self.tmp, "out"),
+                            execute=lambda s, label: (_summary(label), []),
+                            serving=self.srv, assume_yes=True, restart=False,
+                            log=lambda *a: None)
+        self.assertIn("cannot run without restarting", str(e.exception))
+        self.assertEqual(self.srv.applied, [])
+
+    def test_a_matrix_with_no_config_swap_needs_no_restart(self):
+        paths = sweep.run_sweep(sweep.parse_setup("harness=opencode,model=m"),
+                                os.path.join(self.tmp, "out"),
+                                execute=lambda s, label: (_summary(label), []),
+                                serving=self.srv, restart=False,
+                                log=lambda *a: None)
+        self.assertEqual(len(paths), 1)
+        self.assertEqual(self.srv.restarts, 0)
 
 
 class CliWiring(unittest.TestCase):
@@ -410,6 +467,57 @@ class CliWiring(unittest.TestCase):
         self.assertTrue(cfg.thinking)
         self.assertEqual(cfg.max_tokens, 16000)
         self.assertEqual(cfg.label, "a label")
+
+    def test_a_bad_harness_model_spec_fails_before_any_restart(self):
+        from benchkit import cli
+        parsed = _Args(model="")
+        setup, = sweep.parse_setup("config=cfg-a,harness=opencode")
+        with self.assertRaises(SystemExit) as e:
+            cli._sweep_model(parsed, setup)
+        self.assertIn("no model selected", str(e.exception))
+
+    def test_the_restart_flag_is_wired_through_to_run_sweep(self):
+        """An argparse dest typo on the guardrail flag must not pass CI."""
+        from benchkit import cli
+        from benchkit import sweep as sweep_mod
+        seen = {}
+
+        def fake_run_sweep(setups, outdir, **kw):
+            seen.update(kw)
+            raise SystemExit("stop here")
+
+        orig = sweep_mod.run_sweep
+        sweep_mod.run_sweep = fake_run_sweep
+        try:
+            with self.assertRaises(SystemExit):
+                cli.main(["sweep", "--suite", "agentic", "--yes-restart-endpoint",
+                          "--title", "wiring probe",
+                          "--setup", "config=qwen3.6-35b-a3b-nvfp4"])
+        finally:
+            sweep_mod.run_sweep = orig
+        self.assertIs(seen.get("assume_yes"), True)
+
+    def test_a_same_day_report_is_never_overwritten(self):
+        """_stamp() is day-granular, so two same-title sweeps share an outdir."""
+        from benchkit import cli
+        tmp = tempfile.mkdtemp()          # never the real results/, which is append-only
+        self.addCleanup(shutil.rmtree, tmp)
+        outdir = os.path.join(tmp, f"{cli._stamp()}-collision-probe")
+        os.makedirs(outdir)
+        report_path = os.path.join(outdir, "REPORT.md")
+        with open(report_path, "w") as f:
+            f.write("first campaign")
+        orig = cli.RESULTS
+        cli.RESULTS = tmp
+        try:
+            with self.assertRaises(SystemExit) as e:
+                cli.main(["sweep", "--title", "collision probe",
+                          "--setup", "config=qwen3.6-35b-a3b-nvfp4"])
+        finally:
+            cli.RESULTS = orig
+        self.assertIn("refusing to overwrite an existing report", str(e.exception))
+        with open(report_path) as f:
+            self.assertEqual(f.read(), "first campaign")
 
     def test_a_harness_setup_needs_an_agentic_suite(self):
         from benchkit import cli
