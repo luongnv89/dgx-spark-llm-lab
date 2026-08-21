@@ -3,10 +3,10 @@
 # Runs attached (no -d) so systemd owns the lifecycle.
 #
 # Restored as the default on 2026-08-17, reverting the 2026-08-17 swap to
-# Qwen3.8-27B-NVFP4. That version is kept as start-qwen.sh.qwen38.bak (dense
-# model, stock aarch64 image, DSpark drafter at k=7) -- copy it back over this
-# file and `systemctl --user restart vllm-qwen` to switch again. Clients are
-# unaffected either way: same port 8801, same alias, same router on :8001.
+# Qwen3.8-27B-NVFP4. That recipe is kept as configs/qwen3.8-27b-nvfp4-dspark.sh
+# (dense model, stock aarch64 image, DSpark drafter at k=7) -- switch back with
+# `./bench apply qwen3.8-27b-nvfp4-dspark --restart`. Clients are unaffected
+# either way: same port 8801, same alias, same router on :8001.
 #
 # This is a MoE model, so it needs the mia-vllm-gb10 build and the
 # --moe-backend / --linear-backend flashinfer_b12x flags below; the Qwen3.8

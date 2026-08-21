@@ -62,7 +62,9 @@ curl -s localhost:8001/v1/chat/completions \
   -d '{"model":"montimage-dgx-spark","messages":[{"role":"user","content":"hi"}]}'
 
 # thinking off for this request (default is ON)
-  -d '{"model":"montimage-dgx-spark","messages":[...],
+curl -s localhost:8001/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"montimage-dgx-spark","messages":[{"role":"user","content":"hi"}],
        "chat_template_kwargs":{"enable_thinking":false}}'
 ```
 
@@ -105,7 +107,7 @@ runs with `VLLM_USE_V2_MODEL_RUNNER=0`.
   `--attention-backend flashinfer`: Qwen3.6-35B-A3B is MoE and needs the GB10
   linear kernels. These flags do **not** transfer to a dense model — the
   Qwen3.8-27B recipe (stock image, DSpark drafter at k=7, no MoE flags) is kept
-  intact in `start-qwen.sh.qwen38.bak` and `serve-qwen38-4bit.sh`.
+  intact in `configs/qwen3.8-27b-nvfp4-dspark.sh` and `serve-qwen38-4bit.sh`.
 - MTP speculative decoding, 2 tokens, triton MoE backend for the draft pass.
 - Do not benchmark the first engine instance after a cold `vllm-cache` — the
   first start JIT-compiles kernels *during* inference and reads far slower than
