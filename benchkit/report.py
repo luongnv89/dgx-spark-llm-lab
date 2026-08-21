@@ -74,11 +74,18 @@ def _setup_of(run):
     """
     s = run["summary"]
     cfg = s["config"]
-    harness = cfg.get("harness") or (s.get("harness") or {}).get("name") or BUILTIN_HARNESS
+    # harness.describe() emits "harness" (base.py/opencode.py/pi.py/claudecode.py),
+    # not "name" -- reading the wrong key here would file every legacy harness
+    # run under the built-in loop and rank three harnesses inside one block.
+    block = s.get("harness") or {}
+    harness = cfg.get("harness") or block.get("harness") or block.get("name") \
+        or BUILTIN_HARNESS
     return dict(
         harness=harness,
         thinking=bool(cfg.get("thinking")),
         config=cfg.get("serving_config") or "not recorded",
+        # a swept row that deliberately used the live launcher says so; only a
+        # file that never recorded the field at all is "not recorded"
         model=cfg.get("served_model_id") or cfg.get("model") or "?",
         samples=cfg.get("samples"),
     )
@@ -160,7 +167,9 @@ def rank_setups(runs, labels):
         verdict = (f"**Winner: {labels[best]}** — {value(best):.1f} against "
                    f"{value(runner_up):.1f} for {labels[runner_up]}, "
                    f"a margin of {margin:.1f} points. ")
-        scale = (f"~{floor:.1f} points at {samples} samples per task "
+        where = (f"at {samples} samples per task" if samples
+                 else "at the default sample count (this run did not record one)")
+        scale = (f"~{floor:.1f} points {where} "
                  f"(~{NOISE_POINTS:.0f} at {NOISE_SAMPLES}, scaled by 1/sqrt(n))")
         if margin < floor:
             verdict += (f"That is **inside the noise floor** of {scale} — treat it as "

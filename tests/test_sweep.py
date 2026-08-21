@@ -387,6 +387,42 @@ class RankedReport(unittest.TestCase):
                          report.build(runs, title="t"))
 
 
+class LegacyAttribution(unittest.TestCase):
+    """Result files written before `bench sweep` must still rank honestly.
+
+    `harness.describe()` records the harness under the key "harness", not
+    "name". Reading the wrong key would file every pre-sweep harness run under
+    the built-in loop and rank three harnesses inside a single block — exactly
+    the cross-harness comparison the ranking exists to prevent.
+    """
+
+    def test_a_legacy_harness_block_is_read_and_kept_in_its_own_block(self):
+        runs = []
+        for name, score in (("opencode", 0.79), ("pi", 0.77), (None, 0.67)):
+            s = _summary(name or "benchkit loop", score=score)
+            s["config"].pop("harness")
+            s["config"].pop("serving_config")
+            if name:
+                s["harness"] = {"harness": name, "model": "m"}
+            runs.append({"summary": s, "_path": f"{name}.json"})
+        md = report.rank_setups(runs, ["opencode", "pi", "builtin"])
+        self.assertIn("### opencode · thinking OFF", md)
+        self.assertIn("### pi · thinking OFF", md)
+        self.assertIn(f"### {report.BUILTIN_HARNESS} · thinking OFF", md)
+        # every block holds exactly one run, so none can crown another harness
+        self.assertEqual(md.count("only setup in this block"), 3)
+
+    def test_a_missing_sample_count_never_renders_as_none(self):
+        runs = []
+        for label, score in (("a", 0.40), ("b", 0.80)):
+            s = _summary(label, score=score)
+            s["config"]["samples"] = None
+            runs.append({"summary": s, "_path": f"{label}.json"})
+        md = report.rank_setups(runs, ["a", "b"])
+        self.assertNotIn("None samples", md)
+        self.assertIn("did not record one", md)
+
+
 class NoRestartIsRefused(unittest.TestCase):
     """Swapping a config without restarting would file a lie in append-only results/."""
 
@@ -468,6 +504,62 @@ class CliWiring(unittest.TestCase):
         self.assertEqual(cfg.max_tokens, 16000)
         self.assertEqual(cfg.label, "a label")
 
+    def test_result_paths_are_known_before_the_first_restart(self):
+        setups = sweep.parse_setup("config=cfg-a,thinking=both")
+        paths = sweep.result_paths(setups, "/out", "m")
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(all(p.startswith("/out/") and p.endswith(".json")
+                            for p in paths))
+        self.assertEqual(len(set(paths)), 2)
+
+    def test_a_colliding_result_file_is_caught_before_any_restart(self):
+        from benchkit import cli
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        setups = sweep.parse_setups(["config=qwen3.6-35b-a3b-nvfp4"],
+                                    default_model="montimage-dgx-spark")
+        outdir = os.path.join(tmp, f"{cli._stamp()}-half-finished")
+        os.makedirs(outdir)
+        victim, = sweep.result_paths(setups, outdir, "montimage-dgx-spark")
+        with open(victim, "w") as f:
+            f.write("an earlier campaign")
+        orig = cli.RESULTS
+        cli.RESULTS = tmp
+        try:
+            with self.assertRaises(SystemExit) as e:
+                cli.main(["sweep", "--title", "half finished",
+                          "--setup", "config=qwen3.6-35b-a3b-nvfp4"])
+        finally:
+            cli.RESULTS = orig
+        self.assertIn("earlier campaign", str(e.exception))
+        with open(victim) as f:
+            self.assertEqual(f.read(), "an earlier campaign")
+
+    def test_a_harness_setup_on_a_codegen_suite_fails_in_preflight(self):
+        """The wrong --suite must cost zero endpoint restarts, not two."""
+        from benchkit import cli
+        with self.assertRaises(SystemExit) as e:
+            cli.main(["sweep", "--suite", "core16",
+                      "--setup", "config=qwen3.6-35b-a3b-nvfp4,harness=opencode,"
+                                 "model=montimage-dgx-spark"])
+        self.assertIn("agentic suite", str(e.exception))
+
+    def test_report_can_rebuild_the_ranking_from_result_files(self):
+        from benchkit import cli
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        paths = []
+        for label, score in (("a", 0.4), ("b", 0.7)):
+            p = os.path.join(tmp, f"{label}.json")
+            with open(p, "w") as f:
+                json.dump(dict(summary=_summary(label, config="cfg-" + label,
+                                                score=score), results=[]), f)
+            paths.append(p)
+        out = os.path.join(tmp, "REPORT.md")
+        cli.main(["report", *paths, "--setups", "--out", out])
+        with open(out) as f:
+            self.assertIn("## Ranked setups", f.read())
+
     def test_a_bad_harness_model_spec_fails_before_any_restart(self):
         from benchkit import cli
         parsed = _Args(model="")
@@ -515,7 +607,8 @@ class CliWiring(unittest.TestCase):
                           "--setup", "config=qwen3.6-35b-a3b-nvfp4"])
         finally:
             cli.RESULTS = orig
-        self.assertIn("refusing to overwrite an existing report", str(e.exception))
+        self.assertIn("refusing to overwrite files from an earlier campaign",
+                      str(e.exception))
         with open(report_path) as f:
             self.assertEqual(f.read(), "first campaign")
 

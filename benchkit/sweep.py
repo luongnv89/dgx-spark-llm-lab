@@ -199,6 +199,17 @@ def plan(setups, default_model=""):
     return "\n".join(lines)
 
 
+def result_paths(setups, outdir, default_model=""):
+    """Where every row of this matrix would write, in run order.
+
+    Exposed so a caller can check the whole matrix against an existing campaign
+    *before* the first restart: discovering a collision after an hour of runs
+    throws away work that cost a shared endpoint two restarts to produce.
+    """
+    return [os.path.join(outdir, _slug(s.resolved_label(default_model)) + ".json")
+            for s in setups]
+
+
 def approve_restart(configs, assume_yes=False, stdin=None, stdout=None, log=print):
     """Gate every endpoint restart behind an explicit, recorded approval.
 
@@ -325,8 +336,9 @@ def run_sweep(setups, outdir, execute, serving, assume_yes=False, restart=True,
                 summary, results = execute(s, label)
                 p = os.path.join(outdir, _slug(label) + ".json")
                 if os.path.exists(p):
-                    # results/ is append-only; a colliding name is a bug, not a
-                    # licence to overwrite somebody's campaign.
+                    # backstop: callers check the whole matrix up front (see
+                    # result_paths), but results/ is append-only, so a colliding
+                    # name is a bug, never a licence to overwrite a campaign.
                     raise SystemExit(f"refusing to overwrite an existing result "
                                      f"file: {p}")
                 with open(p, "w") as f:

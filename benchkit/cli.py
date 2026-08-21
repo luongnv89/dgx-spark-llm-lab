@@ -128,7 +128,7 @@ def cmd_report(args):
     runs = [report.load(p) for p in args.results]
     notes = open(args.notes).read() if args.notes else None
     md = report.build(runs, title=args.title, question=args.question,
-                      verdict=args.verdict, notes=notes)
+                      verdict=args.verdict, notes=notes, setups=args.setups)
     out = args.out or os.path.join(os.path.dirname(args.results[0]), "REPORT.md")
     with open(out, "w") as f:
         f.write(md)
@@ -201,6 +201,31 @@ def _sweep_model(args, setup):
         raise SystemExit(f"setup {setup.resolved_label(args.model)!r}: {e}") from e
 
 
+def _sweep_harness(args, setup):
+    """Build and probe the harness one setup needs. Every failure is a user error.
+
+    Called from the pre-flight pass as well as from the run, so a wrong suite
+    kind, a bad model spec or an uninstalled harness is reported before the
+    first endpoint restart rather than after it -- a shared endpoint should
+    never be restarted twice to discover a typo.
+    """
+    from benchkit import harness as H
+
+    if kind(args.suite) != "agentic":
+        raise SystemExit(f"setup {setup.resolved_label(args.model)!r} runs through "
+                         f"a harness, which needs an agentic suite; --suite is "
+                         f"{args.suite!r} (try agentic, agentic-hard, agentic-all)")
+    # A sweep exists to measure *this* endpoint, so a harness in a sweep is
+    # always pointed at it rather than at its own configured providers.
+    endpoint = args.endpoint or args.base_url
+    provider, model = _sweep_model(args, setup)
+    h = H.get(setup.harness, provider=provider, model=model, base_url=endpoint)
+    ok, detail = h.available()
+    if not ok:
+        raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
+    return h
+
+
 def _sweep_execute(args, setup, label):
     """Run one setup row and return its (summary, results).
 
@@ -217,28 +242,19 @@ def _sweep_execute(args, setup, label):
             max_tokens=args.max_tokens_think if setup.thinking else args.max_tokens,
             samples=args.samples, concurrency=args.concurrency,
             test_timeout=args.test_timeout,
-            serving_config=setup.config, harness="")
+            serving_config=setup.config or setup.config_name, harness="")
         return _execute_suite(args.suite, tasks, cfg, max_turns=args.max_turns)
 
-    from benchkit import harness as H
     from benchkit.harness import runner as hrunner
 
-    if kind(args.suite) != "agentic":
-        raise SystemExit("harness setups need an agentic suite "
-                         "(agentic, agentic-hard, agentic-all)")
-    # A sweep exists to measure *this* endpoint, so a harness in a sweep is
-    # always pointed at it rather than at its own configured providers.
+    h = _sweep_harness(args, setup)
     endpoint = args.endpoint or args.base_url
-    provider, model = _sweep_model(args, setup)
-    h = H.get(setup.harness, provider=provider, model=model, base_url=endpoint)
-    ok, detail = h.available()
-    if not ok:
-        raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
     cfg = runner.Config(base_url=endpoint, model=h.model_spec, label=label,
                         thinking=setup.thinking, max_tokens=0,
                         samples=args.samples, concurrency=args.concurrency,
                         test_timeout=args.test_timeout,
-                        serving_config=setup.config, harness=h.name)
+                        serving_config=setup.config or setup.config_name,
+                        harness=h.name)
     return hrunner.run(h, tasks, cfg, on_result=_print_agentic,
                        timeout=args.timeout, keep_dirs=False)
 
@@ -268,16 +284,19 @@ def cmd_sweep(args):
     S.check_sweepable(setups, serving)
     for setup in setups:
         if setup.harness:
-            _sweep_model(args, setup)
+            _sweep_harness(args, setup)
 
+    # results/ is append-only and _stamp() is day-granular, so a second sweep
+    # with the same title on the same day would land in the same directory.
+    # Every collision is found now, not after a restart and an hour of runs.
     outdir = os.path.join(RESULTS, f"{_stamp()}-{_slug(args.title)}")
     out = os.path.join(outdir, "REPORT.md")
-    if os.path.exists(out):
-        # results/ is append-only, and _stamp() is day-granular: a second sweep
-        # with the same title on the same day would silently bury the first
-        # campaign's report while orphaning its result files.
-        raise SystemExit(f"refusing to overwrite an existing report: {out}\n"
-                         "Give this sweep a different --title.")
+    taken = [p for p in [out] + S.result_paths(setups, outdir, args.model)
+             if os.path.exists(p)]
+    if taken:
+        raise SystemExit("refusing to overwrite files from an earlier campaign:\n"
+                         + "\n".join(f"  {p}" for p in taken)
+                         + "\nGive this sweep a different --title.")
     print(f"suite={args.suite}  {len(setups)} setups  results -> {outdir}\n")
 
     paths = S.run_sweep(
@@ -478,6 +497,9 @@ def main(argv=None):
     s.add_argument("--question")
     s.add_argument("--verdict")
     s.add_argument("--notes", help="path to a Markdown file inserted as analysis")
+    s.add_argument("--setups", action="store_true",
+                   help="add the ranked-setups section, as `bench sweep` writes it "
+                        "— rebuilds a sweep's ranking from its result files")
     s.add_argument("--out")
     s.set_defaults(func=cmd_report)
 

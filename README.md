@@ -153,6 +153,10 @@ single cross-harness "winner" would be reporting the harness. Each block names i
 winner and says whether the margin clears the noise floor for the sample count used (~8
 points at `--samples 2`, scaled by 1/sqrt(n) above that).
 
+The ranking is rebuildable from the result files alone — `./bench report <dir>/*.json
+--setups` regenerates it without re-running anything, so a sweep that finished but tripped
+over its report is not lost.
+
 Not every recipe in `configs/` can be swept — `bench configs` marks the ones that cannot and
 says why (a llama.cpp script, a standalone tunable server, a secondary backend on its own
 unit are all fine recipes, just not drivable by the `vllm-qwen` systemd machinery).
