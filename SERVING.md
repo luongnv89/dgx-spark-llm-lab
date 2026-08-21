@@ -42,6 +42,19 @@ Changing which model hides behind the alias: edit `MODEL_ID` /
 `--served-model-name` in `start-qwen.sh`, then restart the unit. Clients never
 change.
 
+### Router limits
+
+- **Request bodies** are capped at `CLIENT_MAX_SIZE` = 262 144 tokens × 16
+  B/token ≈ 4 MiB, derived from the `--max-model-len 262144` that
+  `start-qwen.sh` pins: a larger body cannot fit the context window anyway and
+  is rejected with `413` instead of being buffered.
+- **Backend discovery** (`/v1/models` fetches) is cached for
+  `ROUTER_DISCOVERY_TTL` seconds (default 60); one listing request costs at
+  most one upstream call per backend.
+- An unknown model name triggers at most one re-discovery per name per
+  `ROUTER_UNKNOWN_MODEL_TTL` seconds (default 60); retries of the same bogus
+  name cost no upstream traffic.
+
 ## Connecting clients
 
 Model is selected by the `model` field in the request body (or `--model` /

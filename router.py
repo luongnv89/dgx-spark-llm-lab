@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 
 from aiohttp import ClientSession, ClientTimeout, web
 
@@ -22,13 +23,37 @@ LISTEN_HOST = os.environ.get("ROUTER_HOST") or "127.0.0.1"
 LISTEN_PORT = int(os.environ.get("ROUTER_PORT", "8001"))
 ROUTER_TOKEN = os.environ.get("ROUTER_TOKEN", "")
 
+# Request bodies are capped at MAX_MODEL_LEN_TOKENS * BYTES_PER_TOKEN bytes:
+# start-qwen.sh pins --max-model-len 262144, so no servable request can carry
+# more than that many tokens, and 16 bytes per token is generous even for
+# multi-byte UTF-8 plus JSON \uXXXX escaping and formatting overhead (~4 MiB).
+# Anything larger cannot fit the context window anyway, so aiohttp rejects it
+# with 413 instead of buffering up to the previous 1 GiB per concurrent
+# request (issue #39).
+MAX_MODEL_LEN_TOKENS = int(os.environ.get("ROUTER_MAX_MODEL_LEN", "262144"))
+BYTES_PER_TOKEN = 16
+CLIENT_MAX_SIZE = MAX_MODEL_LEN_TOKENS * BYTES_PER_TOKEN
+
+# Backend /v1/models listings are cached for DISCOVERY_TTL_SECONDS: both the
+# routing map and the merged listing come out of one fetch pass (one upstream
+# call per backend). A request naming an unknown model may trigger at most one
+# extra pass per name per UNKNOWN_MODEL_TTL_SECONDS (negative cache), so a
+# misconfigured client in a retry loop cannot hammer every backend (issue #40).
+DISCOVERY_TTL_SECONDS = float(os.environ.get("ROUTER_DISCOVERY_TTL", "60"))
+UNKNOWN_MODEL_TTL_SECONDS = float(os.environ.get("ROUTER_UNKNOWN_MODEL_TTL", "60"))
+_UNKNOWN_ATTEMPTS_MAX = 4096
+
 
 def _is_loopback(host: str) -> bool:
     """Return True when *host* resolves to a loopback address."""
     return host in ("127.0.0.1", "::1", "localhost")
 
 
-async def _auth_middleware(request: web.Request, handler) -> web.Response:
+@web.middleware
+async def _auth_middleware(
+    request: web.Request,
+    handler,
+) -> web.StreamResponse:
     """Require a Bearer token when the router is bound non-loopback."""
     if _is_loopback(LISTEN_HOST):
         return await handler(request)
@@ -63,29 +88,63 @@ log = logging.getLogger("router")
 
 # discovered at runtime: upstream-reported model id -> backend base
 _discovered: dict[str, str] = {}
+# merged, deduped /v1/models listing served by handle_models
+_models_cache: list[dict] = []
+# time.monotonic() of the last discovery pass (successful or not)
+_discovered_at: float = float("-inf")
+# unknown model name -> time.monotonic() of the last re-discovery it triggered
+_unknown_attempts: dict[str, float] = {}
 _discover_lock = asyncio.Lock()
 
 
-async def discover(session: ClientSession, force: bool = False) -> None:
-    """Ask each backend which model ids it serves."""
-    async with _discover_lock:
-        if _discovered and not force:
-            return
-        found: dict[str, str] = {}
-        for name, base in BACKENDS.items():
-            try:
-                async with session.get(f"{base}/v1/models") as r:
-                    if r.status != 200:
+async def _fetch_backends(session: ClientSession) -> tuple[dict[str, str], list[dict]]:
+    """Fetch /v1/models from every distinct backend exactly once.
+
+    Returns (model id -> backend base, merged deduped model objects).
+    """
+    found: dict[str, str] = {}
+    data: list[dict] = []
+    seen: set[str] = set()
+    for base in dict.fromkeys(BACKENDS.values()):
+        try:
+            async with session.get(f"{base}/v1/models") as r:
+                if r.status != 200:
+                    continue
+                for m in (await r.json()).get("data", []):
+                    mid = m.get("id")
+                    if not mid:
                         continue
-                    body = await r.json()
-                    for m in body.get("data", []):
-                        if m.get("id"):
-                            found[m["id"]] = base
-            except Exception as e:
-                log.warning("discover %s (%s) failed: %s", name, base, e)
-        if found:
-            _discovered.clear()
-            _discovered.update(found)
+                    if mid not in found:
+                        found[mid] = base
+                    if mid not in seen:
+                        seen.add(mid)
+                        data.append(m)
+        except Exception as e:
+            log.warning("discover %s failed: %s", base, e)
+    return found, data
+
+
+async def _discover_locked(session: ClientSession, force: bool = False) -> None:
+    """Run at most one backend fetch pass; caller holds _discover_lock."""
+    global _models_cache, _discovered_at
+    now = time.monotonic()
+    # Freshness is tracked by _discovered_at alone: an empty pass (every
+    # backend down or still loading) also counts as fresh, so a dead backend
+    # is re-polled at most once per TTL instead of on every request.
+    if not force and now - _discovered_at < DISCOVERY_TTL_SECONDS:
+        return
+    found, data = await _fetch_backends(session)
+    if found:
+        _discovered.clear()
+        _discovered.update(found)
+        _models_cache = data
+    _discovered_at = now
+
+
+async def discover(session: ClientSession, force: bool = False) -> None:
+    """Ask each backend which model ids it serves (TTL-cached)."""
+    async with _discover_lock:
+        await _discover_locked(session, force)
 
 
 def resolve(model: str) -> str | None:
@@ -98,23 +157,40 @@ def known_models() -> list[str]:
     return sorted(set(BACKENDS) | set(_discovered))
 
 
+async def resolve_or_refresh(session: ClientSession, model: str) -> str | None:
+    """Resolve *model*, re-discovering at most once per name per TTL.
+
+    An unknown model triggers one discovery pass — and only if the cached
+    listing is stale; a fresh listing that lacks the name is authoritative.
+    Either way the attempt is remembered, so retries of the same unknown
+    model cost no upstream traffic until UNKNOWN_MODEL_TTL_SECONDS elapses.
+    """
+    base = resolve(model)
+    if base is not None:
+        return base
+    async with _discover_lock:
+        now = time.monotonic()
+        last = _unknown_attempts.get(model, float("-inf"))
+        if now - last < UNKNOWN_MODEL_TTL_SECONDS:
+            return None  # negative cache hit: recently tried for this name
+        _unknown_attempts[model] = now
+        if len(_unknown_attempts) > _UNKNOWN_ATTEMPTS_MAX:
+            for stale in [k for k, t in _unknown_attempts.items()
+                          if t < now - UNKNOWN_MODEL_TTL_SECONDS]:
+                del _unknown_attempts[stale]
+        if not (_discovered and now - _discovered_at < DISCOVERY_TTL_SECONDS):
+            # listing is stale or empty — one refresh attempt (a no-op when
+            # another pass just completed under this lock)
+            await _discover_locked(session)
+    return resolve(model)
+
+
 async def handle_models(request: web.Request) -> web.Response:
     session: ClientSession = request.app["session"]
-    await discover(session, force=True)
-    data = []
-    seen = set()
-    for base in dict.fromkeys(BACKENDS.values()):
-        try:
-            async with session.get(f"{base}/v1/models") as r:
-                if r.status != 200:
-                    continue
-                for m in (await r.json()).get("data", []):
-                    if m.get("id") and m["id"] not in seen:
-                        seen.add(m["id"])
-                        data.append(m)
-        except Exception as e:
-            log.warning("models from %s failed: %s", base, e)
-    return web.json_response({"object": "list", "data": data})
+    # One TTL-gated discovery pass fills both the routing map and the merged
+    # listing; within the TTL this serves from cache with no upstream calls.
+    await discover(session)
+    return web.json_response({"object": "list", "data": list(_models_cache)})
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -137,7 +213,17 @@ async def handle_health(request: web.Request) -> web.Response:
 
 async def proxy(request: web.Request) -> web.StreamResponse:
     session: ClientSession = request.app["session"]
-    raw = await request.read()
+    try:
+        raw = await request.read()
+    except web.HTTPRequestEntityTooLarge:
+        # aiohttp enforces CLIENT_MAX_SIZE before buffering; nothing beyond
+        # the limit is ever read (issue #39).
+        return web.json_response(
+            {"error": {"message": f"request body too large; limit is "
+                                  f"{CLIENT_MAX_SIZE} bytes",
+                       "type": "invalid_request_error",
+                       "code": "request_too_large"}},
+            status=413)
     try:
         payload = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
@@ -151,10 +237,7 @@ async def proxy(request: web.Request) -> web.StreamResponse:
             {"error": {"message": "missing 'model'", "type": "invalid_request_error"}},
             status=400)
 
-    base = resolve(model)
-    if base is None:
-        await discover(session, force=True)
-        base = resolve(model)
+    base = await resolve_or_refresh(session, model)
     if base is None:
         return web.json_response(
             {"error": {"message": f"unknown model {model!r}; available: "
@@ -202,10 +285,9 @@ async def on_stop(app: web.Application) -> None:
     await app["session"].close()
 
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    app = web.Application(client_max_size=1024 ** 3, middlewares=[_auth_middleware])
+def create_app() -> web.Application:
+    app = web.Application(client_max_size=CLIENT_MAX_SIZE,
+                          middlewares=[_auth_middleware])
     app.on_startup.append(on_start)
     app.on_cleanup.append(on_stop)
     app.router.add_get("/v1/models", handle_models)
@@ -218,6 +300,13 @@ def main() -> None:
                  "/v1/messages", "/v1/messages/count_tokens",
                  "/v1/responses"):
         app.router.add_post(path, proxy)
+    return app
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    app = create_app()
     mode = "loopback (no auth)" if _is_loopback(LISTEN_HOST) else "non-loopback"
     if ROUTER_TOKEN:
         mode += " + bearer token required"
