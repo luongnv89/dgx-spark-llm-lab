@@ -130,9 +130,9 @@ def cmd_run(args):
         print(f"agent score            {summary['agent_score'] * 100:.1f}   "
               f"(solve {summary['pass_at_1'] * 100:.1f} % x efficiency "
               f"{(summary['mean_efficiency'] or 0) * 100:.1f} %)")
-        print(f"mean calls vs par      {summary['mean_tool_calls']:.1f} vs "
-              f"{summary['mean_par_calls']:.1f}")
-        print(f"mean turns / calls     {summary['mean_turns']:.1f} / {summary['mean_tool_calls']:.1f}")
+        print(f"mean calls vs par      {summary['mean_tool_calls'] or 0:.1f} vs "
+              f"{summary['mean_par_calls'] or 0:.1f}")
+        print(f"mean turns / calls     {summary['mean_turns'] or 0:.1f} / {summary['mean_tool_calls'] or 0:.1f}")
         print(f"valid tool-call rate   {(summary['valid_call_rate'] or 0) * 100:.1f} %")
         print(f"malformed / unknown    {summary['malformed_args']} / {summary['unknown_tools']}")
         print(f"turn-limit / stalled   {summary['hit_turn_limit']} / {summary['stalled_no_tool_call']}")
@@ -196,8 +196,11 @@ def cmd_compare(args):
                 print(f"{line}  ({p})", flush=True)
     finally:
         if original and args.restore:
-            print(f"\nrestoring {original}")
-            serving.swap_to(original)
+            try:
+                print(f"\nrestoring {original}")
+                serving.swap_to(original)
+            except Exception as e:  # noqa: BLE001 — log the failure, never mask the original
+                print(f"WARNING: could not restore {original}: {e}", file=sys.stderr)
 
     md = report.build([report.load(p) for p in paths], title=args.title,
                       question=args.question)

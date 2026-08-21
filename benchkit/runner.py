@@ -44,11 +44,19 @@ class Config:
     @classmethod
     def from_env(cls, **over):
         e = os.environ.get
+        raw = e("BENCH_THINKING", "").lower()
+        thinking = raw in ("1", "true", "yes", "on")
+        try:
+            max_tokens = int(e("BENCH_MAX_TOKENS", cls.max_tokens))
+        except ValueError:
+            raise SystemExit(
+                f"BENCH_MAX_TOKENS must be an integer, got {e('BENCH_MAX_TOKENS')!r}"
+            ) from None
         c = cls(
             base_url=e("BENCH_BASE_URL", cls.base_url),
             model=e("BENCH_MODEL", cls.model),
-            thinking=e("BENCH_THINKING", "0") not in ("0", "false", "False", ""),
-            max_tokens=int(e("BENCH_MAX_TOKENS", cls.max_tokens)),
+            thinking=thinking,
+            max_tokens=max_tokens,
             samples=int(e("BENCH_SAMPLES", cls.samples)),
             concurrency=int(e("BENCH_CONCURRENCY", cls.concurrency)),
             test_timeout=int(e("BENCH_TEST_TIMEOUT", cls.test_timeout)),
@@ -183,14 +191,19 @@ def run(tasks, cfg, on_result=None, keep_code=False):
     return summarize(results, cfg, wall, len(tasks)), results
 
 
-def summarize(results, cfg, wall, n_tasks):
+def _summarize_common(results, cfg, wall, n_tasks):
+    """Shared scoring logic used by both runner and agentic loop.
+
+    Computes *by_task*, *pass_all_samples*, *pass_any_sample*, the token
+    statistics, and *by_difficulty*.  The caller adds kind-specific fields
+    (pass_at_1, agent_score, tool-call counts, …) on top of the returned dict.
+    """
     by_task = {}
     for r in results:
         by_task.setdefault(r["task"], []).append(r)
-    toks = [r["completion_tokens"] for r in results if r["completion_tokens"]]
-    tps = [r["tok_s"] for r in results if r["tok_s"]]
-    ttfts = [r["ttft"] for r in results if r["ttft"]]
-    n_pass = sum(1 for r in results if r["passed"])
+    toks = [r["completion_tokens"] for r in results if r.get("completion_tokens")]
+    tps = [r["tok_s"] for r in results if r.get("tok_s")]
+    ttfts = [r["ttft"] for r in results if r.get("ttft")]
 
     def rate(pred):
         sel = [r for r in results if pred(r)]
@@ -198,7 +211,6 @@ def summarize(results, cfg, wall, n_tasks):
 
     return dict(
         config=asdict(cfg), tasks=n_tasks, generations=len(results),
-        pass_at_1=n_pass / len(results) if results else 0.0,
         pass_all_samples=sum(1 for v in by_task.values()
                              if all(r["passed"] for r in v)) / max(1, len(by_task)),
         pass_any_sample=sum(1 for v in by_task.values()
@@ -209,11 +221,19 @@ def summarize(results, cfg, wall, n_tasks):
         mean_tok_s=sum(tps) / len(tps) if tps else None,
         aggregate_tok_s=sum(toks) / wall if toks else None,
         mean_ttft=sum(ttfts) / len(ttfts) if ttfts else None,
-        truncated=sum(1 for r in results if r.get("completion_tokens")
-                      and r["completion_tokens"] >= cfg.max_tokens - 2),
-        errored=sum(1 for r in results if str(r.get("error", "")).startswith("generation failed")),
         by_task={k: sum(1 for r in v if r["passed"]) / len(v)
                  for k, v in sorted(by_task.items())},
         by_difficulty={d: rate(lambda r, d=d: r["difficulty"] == d)
                        for d in ("easy", "medium", "hard")},
     )
+
+
+def summarize(results, cfg, wall, n_tasks):
+    common = _summarize_common(results, cfg, wall, n_tasks)
+    n_pass = sum(1 for r in results if r["passed"])
+    common["pass_at_1"] = n_pass / len(results) if results else 0.0
+    common["truncated"] = sum(1 for r in results if r.get("completion_tokens")
+                              and r["completion_tokens"] >= cfg.max_tokens - 2)
+    common["errored"] = sum(1 for r in results
+                            if str(r.get("error", "")).startswith("generation failed"))
+    return common

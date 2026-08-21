@@ -66,6 +66,7 @@ import subprocess
 import urllib.request
 
 from .base import Harness, HarnessResult
+from .events import parse_events as _parse_events
 
 #: Built-in tools the model is allowed. Deliberately excludes Task/Workflow
 #: (subagents, which can reach other models) and WebSearch/WebFetch (outside
@@ -286,61 +287,48 @@ def _api_root(url):
     return url[:-3].rstrip("/") if url.endswith("/v1") else url
 
 
-def parse_events(stdout):
-    """Fold Claude Code's stream-json event stream into a HarnessResult."""
-    res = HarnessResult(raw_log=stdout[-20000:])
-    seen_calls = set()
-    assistant_msgs = set()
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        t = ev.get("type")
-        if t == "assistant":
-            msg = ev.get("message") or {}
-            assistant_msgs.add(msg.get("id"))
-            for block in msg.get("content") or []:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    # one message is emitted once per content block, all sharing
-                    # an id; dedupe on the tool_use id rather than the message
-                    tid = block.get("id")
-                    if tid in seen_calls:
-                        continue
-                    seen_calls.add(tid)
+def _claudecode_handler(ev, res, _state):
+    """Handle one Claude Code event. Mutates *res* in place."""
+    t = ev.get("type")
+    if t == "assistant":
+        _state["assistant_count"] += 1
+        msg = ev.get("message") or {}
+        for block in msg.get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                tid = block.get("id")
+                if tid not in _state["seen_calls"]:
+                    _state["seen_calls"].add(tid)
                     res.tool_calls += 1
                     res.trace.append(block.get("name", "?"))
-        elif t == "user":
-            msg = ev.get("message") or {}
-            for block in msg.get("content") or []:
-                if (isinstance(block, dict) and block.get("type") == "tool_result"
-                        and block.get("is_error")):
-                    res.failed_calls += 1
-        elif t == "result":
-            res.turns = ev.get("num_turns") or res.turns
-            u = ev.get("usage") or {}
-            # cache tokens are prefill too; the input column must stay comparable
-            # with pi's and opencode's, which count every token sent.
-            res.input_tokens += ((u.get("input_tokens") or 0)
-                                 + (u.get("cache_creation_input_tokens") or 0)
-                                 + (u.get("cache_read_input_tokens") or 0))
-            res.output_tokens += u.get("output_tokens") or 0
-            # always 0 on this endpoint — see the module docstring and describe()
-            res.reasoning_tokens += (
-                (u.get("output_tokens_details") or {}).get("thinking_tokens") or 0)
-            if ev.get("subtype") == "success":
-                res.stop_reason = ev.get("stop_reason") or "end_turn"
-            else:
-                res.stop_reason = "error"
-                res.error = str(ev.get("result") or ev.get("subtype") or "error")[:200]
-            if ev.get("is_error"):
-                res.stop_reason = "error"
-                res.error = res.error or str(ev.get("result") or "error")[:200]
+    elif t == "user":
+        msg = ev.get("message") or {}
+        for block in msg.get("content") or []:
+            if (isinstance(block, dict) and block.get("type") == "tool_result"
+                    and block.get("is_error")):
+                res.failed_calls += 1
+    elif t == "result":
+        res.turns = ev.get("num_turns") or res.turns
+        u = ev.get("usage") or {}
+        res.input_tokens += ((u.get("input_tokens") or 0)
+                             + (u.get("cache_creation_input_tokens") or 0)
+                             + (u.get("cache_read_input_tokens") or 0))
+        res.output_tokens += u.get("output_tokens") or 0
+        res.reasoning_tokens += (
+            (u.get("output_tokens_details") or {}).get("thinking_tokens") or 0)
+        if ev.get("subtype") == "success":
+            res.stop_reason = ev.get("stop_reason") or "end_turn"
+        else:
+            res.stop_reason = "error"
+            res.error = str(ev.get("result") or ev.get("subtype") or "error")[:200]
+        if ev.get("is_error"):
+            res.stop_reason = "error"
+            res.error = res.error or str(ev.get("result") or "error")[:200]
+
+
+def parse_events(stdout):
+    """Fold Claude Code's stream-json event stream into a HarnessResult."""
+    _state = {"seen_calls": set(), "assistant_count": 0}
+    res = _parse_events(stdout, lambda ev, r: _claudecode_handler(ev, r, _state))
     if not res.turns:
-        res.turns = len(assistant_msgs)
-    if res.stop_reason == "unknown" and res.turns:
-        res.stop_reason = "finished"
+        res.turns = _state["assistant_count"]
     return res

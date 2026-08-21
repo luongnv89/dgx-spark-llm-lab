@@ -8,8 +8,8 @@ by flailing through twenty calls is not the same as one that solves it in four.
 import concurrent.futures as cf
 import json
 import time
-from dataclasses import asdict
 
+from ..runner import _summarize_common
 from .env import Workspace, _no_tool_calls, call
 from .tools import TOOLS, SYSTEM
 
@@ -155,17 +155,11 @@ def run(tasks, cfg, on_result=None, max_turns=MAX_TURNS):
 
 
 def summarize(results, cfg, wall, n_tasks):
-    by_task = {}
-    for r in results:
-        by_task.setdefault(r["task"], []).append(r)
+    common = _summarize_common(results, cfg, wall, n_tasks)
 
     def mean(key):
         vals = [r[key] for r in results if r.get(key) is not None]
         return sum(vals) / len(vals) if vals else None
-
-    def rate(pred):
-        sel = [r for r in results if pred(r)]
-        return (sum(1 for r in sel if r["passed"]) / len(sel)) if sel else None
 
     total_calls = sum(r["tool_calls"] for r in results)
     total_failed = sum(r["failed_calls"] for r in results)
@@ -175,38 +169,28 @@ def summarize(results, cfg, wall, n_tasks):
     # Solving is the price of entry; efficiency breaks the ties that solve rate
     # cannot. A model that solves everything in twice par scores 0.5, not 1.0.
     agent_score = solve * (mean_eff if mean_eff is not None else 0.0)
-    return dict(
-        kind="agentic", config=asdict(cfg), tasks=n_tasks, generations=len(results),
-        pass_at_1=solve,
-        agent_score=agent_score,
-        mean_efficiency=mean_eff,
-        mean_par_calls=(sum(r["par_calls"] for r in results if r.get("par_calls"))
-                        / max(1, sum(1 for r in results if r.get("par_calls")))),
-        pass_all_samples=sum(1 for v in by_task.values()
-                             if all(r["passed"] for r in v)) / max(1, len(by_task)),
-        pass_any_sample=sum(1 for v in by_task.values()
-                            if any(r["passed"] for r in v)) / max(1, len(by_task)),
-        wall_seconds=wall,
-        mean_completion_tokens=mean("completion_tokens"),
-        median_completion_tokens=(sorted(r["completion_tokens"] for r in results)[len(results) // 2]
-                                  if results else None),
-        mean_tok_s=mean("tok_s"), mean_ttft=None,
-        aggregate_tok_s=(sum(r["completion_tokens"] for r in results) / wall) if wall else None,
-        truncated=0,
-        errored=sum(1 for r in results if r["stop_reason"] == "error"),
-        # --- agentic-specific ---
-        mean_turns=mean("turns"),
-        mean_tool_calls=mean("tool_calls"),
-        total_tool_calls=total_calls,
-        valid_call_rate=((total_calls - total_failed) / total_calls) if total_calls else None,
-        malformed_args=sum(r["malformed_args"] for r in results),
-        unknown_tools=sum(r["unknown_tools"] for r in results),
-        hit_turn_limit=sum(1 for r in results if r["stop_reason"] == "max_turns"),
-        stalled_no_tool_call=sum(1 for r in results if r["stop_reason"] == "no_tool_call"),
-        by_task={k: sum(1 for r in v if r["passed"]) / len(v) for k, v in sorted(by_task.items())},
-        by_difficulty={d: rate(lambda r, d=d: r["difficulty"] == d)
-                       for d in ("easy", "medium", "hard")},
-    )
+
+    common["kind"] = "agentic"
+    common["pass_at_1"] = solve
+    common["agent_score"] = agent_score
+    common["mean_efficiency"] = mean_eff
+    common["mean_par_calls"] = (
+        sum(r["par_calls"] for r in results if r.get("par_calls"))
+        / max(1, sum(1 for r in results if r.get("par_calls"))))
+    common["truncated"] = 0
+    common["errored"] = sum(1 for r in results if r["stop_reason"] == "error")
+    # --- agentic-specific ---
+    common["mean_turns"] = mean("turns")
+    common["mean_tool_calls"] = mean("tool_calls")
+    common["total_tool_calls"] = total_calls
+    common["valid_call_rate"] = ((total_calls - total_failed) / total_calls) \
+        if total_calls else None
+    common["malformed_args"] = sum(r["malformed_args"] for r in results)
+    common["unknown_tools"] = sum(r["unknown_tools"] for r in results)
+    common["hit_turn_limit"] = sum(1 for r in results if r["stop_reason"] == "max_turns")
+    common["stalled_no_tool_call"] = sum(1 for r in results
+                                        if r["stop_reason"] == "no_tool_call")
+    return common
 
 
 def validate(tasks):

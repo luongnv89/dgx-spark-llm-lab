@@ -18,8 +18,12 @@ BUILTIN_HARNESS = "built-in loop"
 
 
 def load(path):
-    with open(path) as f:
-        d = json.load(f)
+    """Load a result file, naming the file on any parse failure."""
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"{os.path.basename(path)}: {e}") from None
     d["_path"] = os.path.basename(path)
     return d
 
@@ -54,7 +58,8 @@ def _fmt(v, pct=False, digits=1):
 
 def _chart(title, y_label, categories, values, y_max=None, kind="bar"):
     if y_max is None:
-        y_max = max(values) * 1.15 if values else 1
+        mx = max(values) if values else 0
+        y_max = mx * 1.15 if mx else 1
     cats = ", ".join(f'"{c}"' for c in categories)
     vals = ", ".join(f"{v:.4g}" for v in values)
     return (f"```mermaid\n{BAR}\n"
@@ -412,22 +417,43 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     # A head-to-head across harnesses or thinking modes is the cross-block
     # comparison the ranking exists to forbid, so in a sweep the pair must come
     # from one block -- and if no block holds two runs, there is no pair.
+    # The pair is selected using the *same* key the results table used to bold
+    # the winner, so the disagreement section never compares a pair excluding
+    # the declared winner.
     pool = range(len(S))
     if setups:
         candidates = [idx for idx in _blocks(runs).values() if len(idx) >= 2]
-        pool = max(candidates,
-                   key=lambda idx: max(S[i]["pass_at_1"] for i in idx)) if candidates else []
+        pool = (max(candidates,
+                    key=lambda idx: max(S[i].get("agent_score") if scored
+                                        else S[i]["pass_at_1"] for i in idx))
+                if candidates else [])
     if len(pool) >= 2:
-        order = sorted(pool, key=lambda i: -S[i]["pass_at_1"])[:2]
+        key = "agent_score" if scored else "pass_at_1"
+        order = sorted(pool, key=lambda i: -(S[i].get(key) or S[i][key]))[:2]
         a, b = order
         ta, tb = S[a]["by_task"], S[b]["by_task"]
-        rows = [(t, ta[t], tb.get(t, 0.0)) for t in sorted(ta) if ta[t] != tb.get(t, 0.0)]
+        # Include every task from both runs; tasks only in one run show as "–"
+        all_tasks = sorted(set(ta) | set(tb))
+        rows = []
+        for t in all_tasks:
+            x = ta.get(t)
+            y = tb.get(t)
+            if x is None:
+                rows.append((t, None, y, labels[b]))
+            elif y is None:
+                rows.append((t, x, None, labels[a]))
+            elif x != y:
+                rows.append((t, x, y, labels[a] if x > y else labels[b]))
         if rows:
             out.append(f"## Where they disagree — {labels[a]} vs {labels[b]}\n")
             out.append(f"| Task | {labels[a]} | {labels[b]} | Winner |\n|---|---|---|---|")
-            for t, x, y in rows:
-                out.append(f"| `{t}` | {x*100:.0f} % | {y*100:.0f} % | "
-                           f"{labels[a] if x > y else labels[b]} |")
+            for t, x, y, winner in rows:
+                if x is None:
+                    out.append(f"| `{t}` | – | {y*100:.0f} % | {winner} (not run) |")
+                elif y is None:
+                    out.append(f"| `{t}` | {x*100:.0f} % | – | {winner} (not run) |")
+                else:
+                    out.append(f"| `{t}` | {x*100:.0f} % | {y*100:.0f} % | {winner} |")
             out.append("")
 
     if notes:

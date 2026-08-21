@@ -16,7 +16,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 
-from ..agentic.env import Workspace
+from ..agentic.env import Workspace, materialise
 
 
 @dataclass
@@ -85,11 +85,7 @@ def run_task(harness, task, sample, timeout=900, thinking=False, keep_dir=False)
     container = tempfile.mkdtemp(prefix=f"benchkit-{harness.name}-")
     workdir = harness.prepare(container)
     try:
-        for path, body in task["files"].items():
-            full = os.path.join(workdir, path)
-            os.makedirs(os.path.dirname(full) or workdir, exist_ok=True)
-            with open(full, "w") as f:
-                f.write(body)
+        materialise(task["files"], workdir)
 
         t0 = time.perf_counter()
         hr = harness.run(workdir, task["prompt"], timeout=timeout, thinking=thinking)
