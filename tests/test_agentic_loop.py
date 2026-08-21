@@ -311,6 +311,51 @@ class TestParCalls(unittest.TestCase):
         par = loop.par_calls(bad_task)
         self.assertIsNone(par)
 
+    def test_par_oracle_runs_once_under_concurrency(self):
+        """Concurrent par_calls on a cold cache runs the oracle exactly once."""
+        import concurrent.futures as cf
+        import time
+
+        oracle_runs = []
+
+        def slow_oracle(ws):
+            oracle_runs.append(1)
+            time.sleep(0.05)  # widen the window an unguarded memo would race on
+            ws.write_file("hello.txt", "hello\n")
+            ws.finish("done")
+
+        task = dict(id="par-concurrent", difficulty="easy", prompt="x",
+                    files={}, check=lambda ws: (True, ""),
+                    oracle=slow_oracle)
+        with cf.ThreadPoolExecutor(max_workers=4) as ex:
+            futures = [ex.submit(loop.par_calls, task) for _ in range(4)]
+            pars = [f.result() for f in futures]
+        self.assertEqual(len(oracle_runs), 1)
+        self.assertEqual(pars, [1, 1, 1, 1])
+
+    def test_par_concurrent_distinct_tasks_each_run_once(self):
+        """Every distinct task's oracle runs exactly once under concurrency 4."""
+        import concurrent.futures as cf
+
+        oracle_runs = []
+
+        def make_task(tid):
+            def oracle(ws):
+                oracle_runs.append(tid)
+                ws.write_file("hello.txt", "hello\n")
+                ws.finish("done")
+            return dict(id=tid, difficulty="easy", prompt="x",
+                        files={}, check=lambda ws: (True, ""), oracle=oracle)
+
+        tasks = [make_task(f"par-multi-{i}") for i in range(4)]
+        work = [(t, s) for t in tasks for s in range(2)]
+        with cf.ThreadPoolExecutor(max_workers=4) as ex:
+            futs = [ex.submit(loop.par_calls, t) for t, _ in work]
+            pars = [f.result() for f in futs]
+        self.assertEqual(sorted(oracle_runs),
+                         sorted(t["id"] for t in tasks))
+        self.assertEqual(set(pars), {1})
+
 
 # ---------------------------------------------------------------------------
 # Tests — summarize

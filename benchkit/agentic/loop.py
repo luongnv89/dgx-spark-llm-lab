@@ -7,6 +7,7 @@ by flailing through twenty calls is not the same as one that solves it in four.
 """
 import concurrent.futures as cf
 import json
+import threading
 import time
 
 from ..runner import _summarize_common
@@ -16,6 +17,7 @@ from .tools import TOOLS, SYSTEM
 MAX_TURNS = 25
 
 _PAR_CACHE = {}
+_PAR_LOCK = threading.Lock()
 
 
 def par_calls(task):
@@ -24,15 +26,20 @@ def par_calls(task):
     This is the suite's ruler for effort. Two models that both solve everything
     are not equal, and par turns "how much flailing" into a number that does not
     depend on the model, the prompt, or the wall clock.
+
+    Samples run concurrently in a thread pool, so the memo is lock-guarded
+    (double-checked) and the oracle runs exactly once per task.
     """
     tid = task["id"]
     if tid not in _PAR_CACHE:
-        ws = Workspace(task["files"])
-        try:
-            task["oracle"](ws)
-            _PAR_CACHE[tid] = max(1, len(ws.calls))
-        except Exception:  # noqa: BLE001 — a broken oracle is caught by `bench validate`
-            _PAR_CACHE[tid] = None
+        with _PAR_LOCK:
+            if tid not in _PAR_CACHE:
+                ws = Workspace(task["files"])
+                try:
+                    task["oracle"](ws)
+                    _PAR_CACHE[tid] = max(1, len(ws.calls))
+                except Exception:  # noqa: BLE001 — a broken oracle is caught by `bench validate`
+                    _PAR_CACHE[tid] = None
     return _PAR_CACHE[tid]
 
 
