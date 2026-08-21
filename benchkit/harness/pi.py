@@ -13,6 +13,32 @@ Two flags matter for benchmark validity and are not optional:
 - `--no-context-files`: without it pi discovers AGENTS.md / CLAUDE.md by walking
   up from the working directory, so the benchmark would leak whatever guidance
   happens to sit above the temp dir.
+
+### Pointing it at a model
+
+pi resolves models through its own catalogue and credentials, so there is
+nothing for this adapter to configure: whatever you can run in pi, you can
+benchmark. `list_models()` shells out to `pi --list-models` and returns the
+provider/model pairs it prints, which is how `bench harness models` and the
+interactive picker learn what *your* install can reach.
+
+```bash
+bench harness models --harness pi
+bench harness run --harness pi --model local-dgx/montimage-dgx-spark
+```
+
+One wrinkle in pi's addressing, learned the hard way: the `provider` column of
+`--list-models` is not always a valid `--provider` value. Providers from pi's
+bundled catalogues (`opencode-cli`, …) appear in the listing but are rejected by
+`--provider`, which only knows the ones in `models.json`. Model **ids** resolve
+globally, so the adapter passes `--model <id>` always and `--provider` only when
+the provider really is one pi will accept — the listing's provider column is
+kept for labelling and reporting either way.
+
+There is no explicit-endpoint mode here, unlike the opencode and claude-code
+adapters: pi has no way to take a base URL on the command line, and quietly
+writing a provider into the user's `models.json` would change their editor.
+Adding an endpoint means adding it to pi, once, the normal way.
 """
 import json
 import os
@@ -27,8 +53,13 @@ THINKING_LEVELS = {False: "off", True: "high"}
 class PiHarness(Harness):
     name = "pi"
 
-    def __init__(self, provider="local-dgx", model="montimage-dgx-spark",
+    def __init__(self, provider=None, model=None, base_url=None,
                  binary="pi", agent_dir=None, extra_args=()):
+        if base_url:
+            raise SystemExit(
+                "the pi harness has no explicit-endpoint mode: pi resolves models "
+                "through its own catalogue. Add the endpoint to pi's models.json "
+                "once, then select it with --model <provider>/<model>.")
         self.provider = provider
         self.model = model
         self.binary = binary
@@ -36,43 +67,117 @@ class PiHarness(Harness):
         self.extra_args = list(extra_args)
 
     # --- discovery ------------------------------------------------------
-    def available(self):
+    def _version(self):
         path = shutil.which(self.binary)
         if not path:
-            return False, f"{self.binary} not found on PATH"
+            return None, f"{self.binary} not found on PATH"
         try:
             v = subprocess.run([path, "--version"], capture_output=True, text=True,
-                               timeout=30).stdout.strip()
+                               timeout=30, stdin=subprocess.DEVNULL).stdout.strip()
+            return v.splitlines()[-1] if v else "?", None
         except Exception as e:  # noqa: BLE001
-            return False, f"{self.binary} --version failed: {e}"
-        models = os.path.expanduser(
+            return None, f"{self.binary} --version failed: {e}"
+
+    def _env(self):
+        env = dict(os.environ)
+        if self.agent_dir:
+            env["PI_CODING_AGENT_DIR"] = self.agent_dir
+        env["PI_OFFLINE"] = "1"     # no update checks mid-benchmark
+        return env
+
+    def list_models(self):
+        """Whatever `pi --list-models` prints: the user's own catalogue.
+
+        The printed table is `provider  model  context  max-out  thinking
+        images`, so the first two whitespace-separated columns are the pair we
+        need. Falls back to reading `models.json` directly if the table cannot
+        be parsed, because a listing failure must not look like an empty setup.
+        """
+        path = shutil.which(self.binary)
+        if path:
+            try:
+                out = subprocess.run([path, "--list-models"], env=self._env(),
+                                     capture_output=True, text=True, timeout=120,
+                                     stdin=subprocess.DEVNULL).stdout
+            except Exception:  # noqa: BLE001
+                out = ""
+            entries = []
+            for line in out.splitlines():
+                cols = line.split()
+                if len(cols) < 2 or cols[0].lower() == "provider":
+                    continue
+                entries.append((cols[0], cols[1]))
+            if entries:
+                return entries
+        return self._catalogue_models()
+
+    def _catalogue_path(self):
+        return os.path.expanduser(
             os.path.join(self.agent_dir or "~/.pi/agent", "models.json"))
-        if not os.path.exists(models):
-            return False, f"no pi model catalogue at {models}"
+
+    def _catalogue(self):
+        """(providers, error) read straight from pi's model catalogue file."""
+        path = self._catalogue_path()
+        if not os.path.exists(path):
+            return None, f"no pi model catalogue at {path}"
         try:
-            cat = json.load(open(models))
-            provs = cat.get("providers", {})
+            return json.load(open(path)).get("providers", {}), None
         except Exception as e:  # noqa: BLE001
-            return False, f"unreadable {models}: {e}"
-        if self.provider not in provs:
-            return False, (f"provider {self.provider!r} not in {models}; "
-                           f"have: {', '.join(provs) or 'none'}")
-        ids = [m.get("id") for m in provs[self.provider].get("models", [])]
-        if self.model not in ids:
-            return False, (f"model {self.model!r} not under provider {self.provider!r}; "
-                           f"have: {', '.join(map(str, ids)) or 'none'}")
-        return True, f"pi {v} via {self.provider}/{self.model}"
+            return None, f"unreadable {path}: {e}"
+
+    def _catalogue_models(self):
+        provs, err = self._catalogue()
+        if err:
+            return []
+        return [(name, m.get("id")) for name, p in provs.items()
+                for m in p.get("models", []) if m.get("id")]
+
+    def probe(self):
+        v, err = self._version()
+        if err:
+            return False, err
+        n = len(self.list_models())
+        return True, (f"pi {v} — {n} model(s) in your catalogue"
+                      if n else f"pi {v} — no models in your catalogue")
+
+    def available(self):
+        v, err = self._version()
+        if err:
+            return False, err
+        if not self.model:
+            return False, (f"pi {v}: no model selected — "
+                           f"`bench harness models --harness pi`")
+        entries = self.list_models()
+        if not entries:
+            return False, (f"pi {v} lists no models; check `pi --list-models` "
+                           f"and {self._catalogue_path()}")
+        if self.provider and not any(p == self.provider for p, _ in entries):
+            return False, (f"provider {self.provider!r} is not in `pi --list-models`; "
+                           f"have: {', '.join(sorted({p for p, _ in entries}))}")
+        pool = [m for p, m in entries if not self.provider or p == self.provider]
+        if self.model not in pool:
+            where = (f"under provider {self.provider!r}" if self.provider
+                     else "in your pi catalogue")
+            return False, (f"model {self.model!r} not {where}; "
+                           f"have: {', '.join(map(str, pool)) or 'none'}")
+        return True, f"pi {v} via {self.model_spec}"
 
     def describe(self):
         ok, detail = self.available()
         return dict(harness="pi", provider=self.provider, model=self.model,
+                    model_spec=self.model_spec, source="pi-catalogue",
                     available=ok, detail=detail)
+
+    @property
+    def model_spec(self):
+        return f"{self.provider}/{self.model}" if self.provider else self.model
 
     # --- execution ------------------------------------------------------
     def _argv(self, prompt, thinking):
         return [
             self.binary, "-p", prompt,
-            "--provider", self.provider,
+            # Only providers pi itself will accept; see the module docstring.
+            *(["--provider", self.provider] if self._provider_addressable() else []),
             "--model", self.model,
             "--thinking", THINKING_LEVELS[bool(thinking)],
             "--mode", "json",
@@ -82,11 +187,15 @@ class PiHarness(Harness):
             "--approve",            # trust the temp workspace, do not block on a prompt
         ] + self.extra_args
 
+    def _provider_addressable(self):
+        """Is `--provider <name>` a thing pi will accept, or listing-only?"""
+        if not self.provider:
+            return False
+        provs, err = self._catalogue()
+        return bool(not err and self.provider in provs)
+
     def run(self, workdir, prompt, timeout=900, thinking=False):
-        env = dict(os.environ)
-        if self.agent_dir:
-            env["PI_CODING_AGENT_DIR"] = self.agent_dir
-        env["PI_OFFLINE"] = "1"     # no update checks mid-benchmark
+        env = self._env()
         try:
             p = subprocess.run(self._argv(prompt, thinking), cwd=workdir, env=env,
                                capture_output=True, text=True, timeout=timeout,

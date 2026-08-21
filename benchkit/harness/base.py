@@ -39,9 +39,26 @@ class Harness:
 
     name = "abstract"
 
+    def probe(self):
+        """(ok, detail) — is the harness itself installed and configured?
+
+        Separate from `available()` because "is opencode on this machine" and
+        "can it serve the model you picked" are different questions, and
+        `bench harness list` asks the first one before a model has been chosen.
+        """
+        return self.available()
+
     def available(self):
         """(ok, detail) — is this harness usable on this machine right now?"""
         raise NotImplementedError
+
+    def list_models(self):
+        """[(provider, model)] this harness can reach in the user's own setup.
+
+        An empty list means "cannot enumerate", never "nothing available": a
+        harness with no listing command still runs an explicitly named model.
+        """
+        return []
 
     def describe(self):
         """Version and configuration, recorded in the result file."""

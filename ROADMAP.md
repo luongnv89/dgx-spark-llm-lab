@@ -29,7 +29,9 @@ So the next step is to run the same tasks through the harness sitting on the use
 
 The adapter interface, the real-directory execution backend and per-harness token
 accounting all landed with the pi adapter — see [docs/HARNESSES.md](docs/HARNESSES.md).
-Adding a harness is now three methods: `available()`, `describe()`, `run()`.
+Adding a harness is now three methods — `available()`, `describe()`, `run()` — plus two
+optional ones, `probe()` and `list_models()`, that let `bench harness models` offer the
+user's own configured models for selection.
 
 Four harnesses are now measured on the same model and machine, and they rank differently.
 On the ranking suite: claude-code 68.2, opencode 60.3, pi 55.0, benchkit's own loop 44.9. On

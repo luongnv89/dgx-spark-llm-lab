@@ -165,29 +165,66 @@ def cmd_compare(args):
 
 
 def cmd_harness(args):
-    """Run a suite through a real coding harness on this machine."""
+    """Run a suite through a real coding harness, on whichever model you pick.
+
+    The point of the harness commands is that they work on *your* machine with
+    *your* setup: the model list comes from opencode's or pi's own configuration
+    and credentials, so anyone can run this benchmark against the models they
+    already use, without editing their editor's config.
+    """
     from benchkit import harness as H
+    from benchkit.harness import models as hmodels
     from benchkit.harness import runner as hrunner
 
     if args.harness_cmd == "list":
         for name in H.HARNESSES:
-            h = H.get(name)
-            ok, detail = h.available()
-            print(f"{name:<10} {'ok     ' if ok else 'MISSING'} {detail}")
+            ok, detail = H.get(name).probe()
+            print(f"{name:<12} {'ok     ' if ok else 'MISSING'} {detail}")
         return 0
 
-    h = H.get(args.harness, **({"provider": args.provider} if args.provider else {}),
-              **({"model": args.harness_model} if args.harness_model else {}))
+    endpoint = args.endpoint or os.environ.get("BENCH_HARNESS_ENDPOINT") or None
+
+    if args.harness_cmd == "models":
+        names = [args.harness] if args.harness_explicit else list(H.HARNESSES)
+        for name in names:
+            probe = H.get(name)
+            ok, detail = probe.probe()
+            print(f"\n{name}: {detail}")
+            for provider, model in hmodels.catalogue(probe):
+                print(f"  {hmodels.spec(provider, model)}")
+        return 0
+
+    # --- which model, from the user's own setup --------------------------
+    probe = H.get(args.harness, **_endpoint_kw(args.harness, endpoint))
+    entries = [] if endpoint else hmodels.catalogue(probe)
+    spec = args.model or os.environ.get("BENCH_HARNESS_MODEL") or ""
+    if spec:
+        provider, model = hmodels.resolve(spec, entries, provider=args.provider)
+    elif endpoint:
+        raise SystemExit("--endpoint needs --model <id served by that endpoint>")
+    else:
+        provider, model = hmodels.pick(args.harness, entries)
+
+    h = H.get(args.harness, provider=provider, model=model,
+              **_endpoint_kw(args.harness, endpoint))
     tasks = get(args.suite)
     if kind(args.suite) != "agentic":
         raise SystemExit("harness runs need an agentic suite "
                          "(agentic, agentic-hard, agentic-all)")
-    cfg = runner.Config(base_url="(harness)", model=h.name, label=args.label,
-                        thinking=args.thinking, max_tokens=0, samples=args.samples,
-                        concurrency=args.concurrency, test_timeout=args.test_timeout)
-    if not cfg.label:
-        cfg.label = f"{h.name} think-{'ON' if args.thinking else 'OFF'}"
     ok, detail = h.available()
+    if not ok:
+        raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
+
+    cfg = runner.Config(base_url=endpoint or "(harness)", model=h.model_spec,
+                        label=args.label, thinking=args.thinking, max_tokens=0,
+                        samples=args.samples, concurrency=args.concurrency,
+                        test_timeout=args.test_timeout)
+    if not cfg.label:
+        # The model belongs in the label: two runs of the same harness on
+        # different models are the whole point, and a file named after the
+        # harness alone would overwrite one with the other.
+        cfg.label = (f"{h.name} {_slug(str(h.model_spec))} "
+                     f"think-{'ON' if args.thinking else 'OFF'}")
     print(f"harness={h.name}  {detail}\nsuite={args.suite} ({len(tasks)} tasks)  "
           f"{cfg.label}  samples={cfg.samples} concurrency={cfg.concurrency}\n", flush=True)
 
@@ -199,6 +236,7 @@ def cmd_harness(args):
         json.dump(dict(summary=summary, results=results), f, indent=2)
 
     print("\n" + "=" * 64)
+    print(f"harness / model        {h.name} / {h.model_spec}")
     print(f"agent score            {summary['agent_score'] * 100:.1f}   "
           f"(solve {summary['pass_at_1'] * 100:.1f} % x efficiency "
           f"{(summary['mean_efficiency'] or 0) * 100:.1f} %)")
@@ -212,6 +250,13 @@ def cmd_harness(args):
     print("=" * 64)
     print(f"\nwritten to {out}")
     return 0
+
+
+def _endpoint_kw(name, endpoint):
+    """An explicit endpoint is opt-in, and not every harness can take one."""
+    if not endpoint:
+        return {}
+    return {"base_url": endpoint}
 
 
 def cmd_configs(args):
@@ -237,6 +282,11 @@ def cmd_apply(args):
     else:
         print("\nNot restarted. Apply with:  systemctl --user restart vllm-qwen")
     return 0
+
+
+def _harness_names():
+    from benchkit.harness import HARNESSES
+    return list(HARNESSES)
 
 
 def _stamp():
@@ -304,11 +354,22 @@ def main(argv=None):
                    help="leave the last model serving instead of restoring the original")
     s.set_defaults(func=cmd_compare)
 
-    s = sub.add_parser("harness", help="run a suite through a real coding harness (pi, ...)")
-    s.add_argument("harness_cmd", nargs="?", default="run", choices=["run", "list"])
-    s.add_argument("--harness", default="pi")
-    s.add_argument("--provider", help="harness-side provider name (pi: --provider)")
-    s.add_argument("--harness-model", help="harness-side model id")
+    s = sub.add_parser("harness",
+                       help="run a suite through a real coding harness (opencode, pi, ...)")
+    s.add_argument("harness_cmd", nargs="?", default="run",
+                   choices=["run", "list", "models"],
+                   help="run a suite, list installed harnesses, or list their models")
+    s.add_argument("--harness", default="pi",
+                   help="which harness to drive: " + ", ".join(_harness_names()))
+    s.add_argument("--model", "-m", "--harness-model", dest="model", default="",
+                   help="model to benchmark, as <provider>/<model> or any unique "
+                        "part of it, from your own harness config "
+                        "(default: BENCH_HARNESS_MODEL, else ask)")
+    s.add_argument("--provider", help="restrict --model to one provider")
+    s.add_argument("--endpoint", default="",
+                   help="OpenAI-compatible endpoint to point the harness at for "
+                        "this run instead of using its configured providers "
+                        "(default: BENCH_HARNESS_ENDPOINT; pi does not support it)")
     s.add_argument("--suite", default="agentic-hard", choices=list(SUITES))
     s.add_argument("--samples", type=int, default=1)
     s.add_argument("--concurrency", type=int, default=2)
@@ -330,7 +391,12 @@ def main(argv=None):
                    help="restart the vLLM service and wait until it serves")
     s.set_defaults(func=cmd_apply)
 
+    argv = sys.argv[1:] if argv is None else list(argv)
     args = p.parse_args(argv)
+    # `bench harness models` lists every installed harness; naming one narrows
+    # it. argparse cannot tell a default from an explicit `--harness pi`.
+    args.harness_explicit = any(a == "--harness" or a.startswith("--harness=")
+                                for a in argv)
     return args.func(args) or 0
 
 

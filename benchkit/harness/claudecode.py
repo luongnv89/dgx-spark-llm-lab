@@ -5,10 +5,17 @@ which emits one JSON event per line: `assistant` messages carrying `tool_use`
 content blocks, `user` messages carrying `tool_result` blocks, and a final
 `result` event with `num_turns`, `stop_reason` and cumulative `usage`.
 
-### Pointing it at the local model
+### Pointing it at a model
 
-Claude Code speaks the **Anthropic Messages API**, not the OpenAI one, so
-`BENCH_BASE_URL` (`.../v1`, OpenAI-shaped) is not directly usable. It works here
+By default the adapter changes nothing about your Claude Code install: it runs
+whatever model you name (`--model sonnet`, `--model opus`, …) through your own
+authentication, exactly as `claude -p` would. Claude Code has no command that
+enumerates the models an account can reach, so `list_models()` returns nothing
+and the model id is taken at its word.
+
+With `--endpoint`, the adapter points Claude Code at a server of your choosing
+instead. Claude Code speaks the **Anthropic Messages API**, not the OpenAI one,
+so an OpenAI-shaped `.../v1` URL is not directly usable. It works here
 only because the local stack happens to serve both surfaces: vLLM implements
 `/v1/messages` and `router.py` proxies it alongside `/v1/chat/completions`. The
 adapter therefore points `ANTHROPIC_BASE_URL` at the API *root* (no `/v1`) and
@@ -32,7 +39,7 @@ its built-in tools would invalidate the measurement outright:
 | `--disable-slash-commands` | skills are user-installed prompt injections; this machine has dozens |
 | `--strict-mcp-config` + empty `--mcp-config` | MCP servers are arbitrary external tools |
 | `--no-session-persistence` | no state carries between tasks |
-| `CLAUDE_CONFIG_DIR` | a throwaway config home per run, so nothing is read from or written to the user's |
+| `CLAUDE_CONFIG_DIR` | a throwaway config home per run, so nothing is read from or written to the user's — **only in `--endpoint` mode**: in existing-auth mode the login lives in that directory, so redirecting it would leave every task unauthenticated |
 
 `--permission-mode bypassPermissions` is safe here only because the workspace is
 a throwaway temp directory, exactly as with opencode's `--auto`.
@@ -84,15 +91,16 @@ class ClaudeCodeHarness(Harness):
 
     _config_home = None
 
-    def __init__(self, provider=None, model="montimage-dgx-spark",
+    def __init__(self, provider=None, model=None,
                  base_url=None, binary="claude", api_key="sk-local",
                  tools=DEFAULT_TOOLS, effort=None, extra_args=()):
         # `provider` exists only so the shared CLI flag is accepted; Claude Code
         # has no provider concept for a custom base URL.
         self.provider = provider
         self.model = model
-        self.base_url = _api_root(base_url or os.environ.get(
-            "BENCH_BASE_URL", "http://localhost:8001/v1"))
+        # No endpoint means "use the install as the user has it": their auth,
+        # their default base URL. Only an explicit one is injected.
+        self.base_url = _api_root(base_url) if base_url else None
         self.binary = binary
         self.api_key = api_key
         self.tools = list(tools)
@@ -100,16 +108,41 @@ class ClaudeCodeHarness(Harness):
         self.extra_args = list(extra_args)
 
     # --- discovery ------------------------------------------------------
-    def available(self):
+    def _version(self):
         path = shutil.which(self.binary)
         if not path:
-            return False, f"{self.binary} not found on PATH"
+            return None, f"{self.binary} not found on PATH"
         try:
             v = subprocess.run([path, "--version"], capture_output=True, text=True,
                                timeout=60, stdin=subprocess.DEVNULL
                                ).stdout.strip().splitlines()[-1]
+            return v, None
         except Exception as e:  # noqa: BLE001
-            return False, f"{self.binary} --version failed: {e}"
+            return None, f"{self.binary} --version failed: {e}"
+
+    @property
+    def uses_endpoint(self):
+        return bool(self.base_url)
+
+    @property
+    def model_spec(self):
+        return self.model
+
+    def probe(self):
+        v, err = self._version()
+        if err:
+            return False, err
+        return True, f"{v} — uses your Claude Code authentication"
+
+    def available(self):
+        v, err = self._version()
+        if err:
+            return False, err
+        if not self.model:
+            return False, (f"{v}: no model selected — pass --model "
+                           f"(e.g. sonnet, opus, or an id your endpoint serves)")
+        if not self.uses_endpoint:
+            return True, f"{v} via your Claude Code auth ({self.model})"
 
         models_url = self.base_url + "/v1/models"
         try:
@@ -149,7 +182,9 @@ class ClaudeCodeHarness(Harness):
     def describe(self):
         ok, detail = self.available()
         return dict(
-            harness=self.name, model=self.model, base_url=self.base_url,
+            harness=self.name, model=self.model, model_spec=self.model_spec,
+            base_url=self.base_url,
+            source="endpoint" if self.uses_endpoint else "claude-code-auth",
             api="anthropic-messages", tools=self.tools, effort=self.effort,
             available=ok, detail=detail,
             caveats=[
@@ -203,18 +238,27 @@ class ClaudeCodeHarness(Harness):
 
     def run(self, workdir, prompt, timeout=900, thinking=False):
         env = {k: v for k, v in os.environ.items() if k not in _SCRUB}
-        env["ANTHROPIC_BASE_URL"] = self.base_url
-        env["ANTHROPIC_API_KEY"] = self.api_key
-        env["ANTHROPIC_AUTH_TOKEN"] = self.api_key
-        env["CLAUDE_CONFIG_DIR"] = (getattr(self, "_config_home", None)
-                                    or os.path.join(os.path.dirname(workdir), CONFIG_DIR))
+        if self.uses_endpoint:
+            # Only override credentials when we are overriding the endpoint;
+            # otherwise a placeholder key would break the user's own login.
+            env["ANTHROPIC_BASE_URL"] = self.base_url
+            env["ANTHROPIC_API_KEY"] = self.api_key
+            env["ANTHROPIC_AUTH_TOKEN"] = self.api_key
+        if self.uses_endpoint:
+            # A throwaway config home keeps run state out of the user's ~/.claude.
+            # It cannot be used in existing-auth mode: the login lives in that
+            # directory, and redirecting it would leave every task unauthenticated.
+            env["CLAUDE_CONFIG_DIR"] = (
+                getattr(self, "_config_home", None)
+                or os.path.join(os.path.dirname(workdir), CONFIG_DIR))
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
         env["DISABLE_AUTOUPDATER"] = "1"
         env["DISABLE_TELEMETRY"] = "1"
         env["DISABLE_ERROR_REPORTING"] = "1"
         env["DISABLE_BUG_COMMAND"] = "1"
-        os.makedirs(env["CLAUDE_CONFIG_DIR"], exist_ok=True)
+        if env.get("CLAUDE_CONFIG_DIR"):
+            os.makedirs(env["CLAUDE_CONFIG_DIR"], exist_ok=True)
         try:
             p = subprocess.run(self._argv(prompt), cwd=workdir, env=env,
                                capture_output=True, text=True, timeout=timeout,
