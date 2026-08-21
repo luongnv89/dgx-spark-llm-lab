@@ -55,18 +55,18 @@ docker rm -f "${NAME}" >/dev/null 2>&1 || true
 # emit silent garbage on this architecture. Unused by this dense model.
 exec docker run --rm \
   --name "${NAME}" \
-  --user root \
-  --network host \
+  --user 1000:1000 \
+  --network host   # required: vLLM needs host networking for GPU direct \
   --shm-size=32g \
   --ulimit memlock=-1:-1 \
-  --cap-add=IPC_LOCK \
-  --ipc host \
+  --cap-add=IPC_LOCK   # required: CUDA IPC lock for multi-GPU communication \
+  --ipc host   # required: vLLM uses shared memory for tensor parallelism \
   --gpus all \
   --entrypoint /usr/local/bin/vllm \
   -e VLLM_MARLIN_USE_ATOMIC_ADD=1 \
   -e VLLM_USE_FLASHINFER_MOE_FP4=0 \
-  -e HF_HOME=/root/.cache/huggingface \
-  -v "${HF_HOME}:/root/.cache/huggingface" \
+  -e HF_HOME=/home/1000/.cache/huggingface \
+  -v "${HF_HOME}:/home/1000/.cache/huggingface" \
   -v "${VLLM_CACHE}:/root/.cache/vllm" \
   "${IMAGE}" \
   serve "${MODEL_ID}" \
@@ -86,5 +86,5 @@ exec docker run --rm \
     --tool-call-parser qwen3_xml \
     --enable-auto-tool-choice \
     --limit-mm-per-prompt '{"image":4}' \
-    --allowed-media-domains '*' \
+    --allowed-media-domains "" \
     --override-generation-config '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0}'

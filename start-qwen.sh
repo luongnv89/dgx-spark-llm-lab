@@ -27,24 +27,24 @@ docker rm -f "${NAME}" >/dev/null 2>&1 || true
 
 exec docker run --rm \
   --name "${NAME}" \
-  --user root \
-  --network host \
+  --user 1000:1000 \
+  --network host   # required: vLLM needs host networking for GPU direct \
   --shm-size=32g \
   --ulimit memlock=-1:-1 \
-  --cap-add=IPC_LOCK \
-  --ipc host \
+  --cap-add=IPC_LOCK   # required: CUDA IPC lock for multi-GPU communication \
+  --ipc host   # required: vLLM uses shared memory for tensor parallelism \
   --gpus all \
   --entrypoint /usr/local/bin/vllm \
   -e VLLM_TARGET_DEVICE=cuda \
   -e CUTE_DSL_ARCH=sm_121a \
-  -e HF_HOME=/root/.cache/huggingface \
-  -v "${HF_HOME}:/root/.cache/huggingface" \
+  -e HF_HOME=/home/1000/.cache/huggingface \
+  -v "${HF_HOME}:/home/1000/.cache/huggingface" \
   "${IMAGE}" \
   serve "${MODEL_ID}" \
     --served-model-name montimage-dgx-spark "${MODEL_ID}" \
     --host 127.0.0.1 --port "${PORT}" \
     --tensor-parallel-size 1 \
-    --trust-remote-code \
+    --trust-remote-code   # required: custom MoE backend model architecture \
     --moe-backend auto \
     --gpu-memory-utilization "${UTIL}" \
     --linear-backend flashinfer_b12x \
@@ -62,5 +62,5 @@ exec docker run --rm \
     --tool-call-parser qwen3_coder \
     --enable-auto-tool-choice \
     --limit-mm-per-prompt '{"image":4}' \
-    --allowed-media-domains '*' \
+    --allowed-media-domains "" \
     --override-generation-config '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0}'
