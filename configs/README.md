@@ -34,6 +34,25 @@ points, not gospel.
 "Measured" links to the campaign in [`../results/`](../results/) that produced it.
 Where a cell is blank, that config has not been put through the coding suite.
 
+## Which recipes `bench sweep` can drive
+
+`bench sweep` installs a recipe over `start-qwen.sh` and restarts the `vllm-qwen` systemd
+unit, so a recipe is sweepable only if it declares a literal `MODEL_ID="..."` (the one line
+`serving.py` can read back and report) **and** `NAME="vllm-qwen"` (the unit that actually
+gets restarted). `bench configs` marks the rest and says why:
+
+| Config | Sweepable | Why not |
+|---|---|---|
+| `qwen3.6-35b-a3b-nvfp4` | yes | — |
+| `ornith-1.5-35b-a3b-nvfp4` | yes | — |
+| `qwen3.8-27b-nvfp4-dspark` | yes | — |
+| `qwen3.8-27b-nvfp4-tunable` | no | Parameterised `MODEL=`, and runs as `qwen38-4bit` on port 8002 — a standalone server for sweeping `K`/`DRAFTER`/`SPEC` by hand, not a `vllm-qwen` recipe |
+| `gemma4-12b-w4a16` | no | Runs as `vllm-gemma` on port 8802 — a secondary backend, so restarting `vllm-qwen` would not serve it |
+| `llamacpp-qwen3.8-27b-bench` | no | llama.cpp, not vLLM, and no `MODEL_ID=` line at all |
+
+None of that makes them bad recipes. To make one sweepable, give it a literal
+`MODEL_ID="..."` and `NAME="vllm-qwen"` — that is all the sweep machinery reads.
+
 ## What makes these configs non-obvious
 
 - **MoE models need the `mia-vllm-gb10-linear-b12x` image** plus `--moe-backend` and

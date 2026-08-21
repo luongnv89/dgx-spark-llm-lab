@@ -15,6 +15,7 @@ LAUNCHER = os.path.join(HERE, "start-qwen.sh")
 UNIT = "vllm-qwen"
 HEALTH_URL = "http://127.0.0.1:8801/v1/models"
 MODEL_RE = re.compile(r'^MODEL_ID="([^"]+)"', re.M)
+UNIT_RE = re.compile(r'^NAME="([^"$]+)"', re.M)
 
 
 def current_model(launcher=LAUNCHER):
@@ -75,3 +76,43 @@ def apply_config(name, configs=CONFIGS, launcher=LAUNCHER):
     os.chmod(launcher, 0o755)
     m = MODEL_RE.search(src)
     return path, (m.group(1) if m else None)
+
+
+def unit_of(src):
+    """The systemd unit a recipe declares via NAME=, or None if it is dynamic."""
+    m = UNIT_RE.search(src)
+    return m.group(1) if m else None
+
+
+def sweepable(src, unit=UNIT):
+    """(ok, reason) — can `bench sweep` install this recipe and restart it?
+
+    Two conditions, both mechanical. The recipe must carry a literal
+    `MODEL_ID="..."` line, because that is the only thing MODEL_RE can read and
+    report; and it must declare the same systemd unit this module restarts,
+    because installing a recipe for a different engine or a different backend
+    and then restarting `vllm-qwen` would leave the endpoint serving something
+    nobody asked for. configs/ deliberately holds recipes that fail both -- a
+    llama.cpp benchmark script, an env-tunable standalone server, a secondary
+    gemma backend on its own port. They are good recipes; they are just not
+    drivable from here, and naming one is a user error, not a crash.
+    """
+    if not MODEL_RE.search(src):
+        return False, 'no literal MODEL_ID="..." line — not a vLLM recipe this can drive'
+    declared = unit_of(src)
+    if declared is None:
+        return False, 'no literal NAME="..." unit — the launcher target is dynamic'
+    if declared != unit:
+        return False, f"runs as {declared!r}, not the {unit!r} unit this sweep restarts"
+    return True, ""
+
+
+def sweepable_configs(configs=CONFIGS, unit=UNIT):
+    """([(name, model_id, path), ...], [(name, reason), ...]) — usable, skipped."""
+    ok, skipped = [], []
+    for name, model_id, path in list_configs(configs):
+        with open(path) as f:
+            good, reason = sweepable(f.read(), unit=unit)
+        (ok if good else skipped).append(
+            (name, model_id, path) if good else (name, reason))
+    return ok, skipped

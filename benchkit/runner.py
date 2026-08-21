@@ -33,6 +33,12 @@ class Config:
     concurrency: int = 4
     test_timeout: int = 60
     temperature: float | None = None
+    # --- setup attribution: which *setup* produced this run, not just which
+    # model. A ranked cross-setup table needs something to key on, and a result
+    # file that does not name its serving config and harness cannot be ranked
+    # against one that used a different pair (issue #57).
+    serving_config: str = ""   # configs/<name>.sh active during the run
+    harness: str = ""          # harness name, or "" for benchkit's own loop
     extra: dict = field(default_factory=dict)
 
     @classmethod

@@ -9,6 +9,12 @@ import os
 
 BAR = "xychart-beta"
 
+#: at 2 samples per task, anything under this many points is noise, not signal
+NOISE_POINTS = 8.0
+
+#: what a run that used benchkit's own tool loop, rather than a harness, is called
+BUILTIN_HARNESS = "built-in loop"
+
 
 def load(path):
     with open(path) as f:
@@ -57,7 +63,101 @@ def _chart(title, y_label, categories, values, y_max=None, kind="bar"):
             f"    {kind} [{vals}]\n```\n")
 
 
-def build(runs, title, question=None, verdict=None, notes=None, short_labels=None):
+def _setup_of(run):
+    """The (harness, thinking, config, model) a run came from, best-effort.
+
+    `bench sweep` records the serving config and harness on the run config, so
+    a swept result is fully attributed. Older result files predate those fields
+    and fall back to whatever the harness block recorded, then to the built-in
+    loop -- an unlabelled row is still reported, just as "not recorded".
+    """
+    s = run["summary"]
+    cfg = s["config"]
+    harness = cfg.get("harness") or (s.get("harness") or {}).get("name") or BUILTIN_HARNESS
+    return dict(
+        harness=harness,
+        thinking=bool(cfg.get("thinking")),
+        config=cfg.get("serving_config") or "not recorded",
+        model=cfg.get("served_model_id") or cfg.get("model") or "?",
+        samples=cfg.get("samples"),
+    )
+
+
+def _score_of(summary):
+    """(value, metric-name) — agent score where it exists, else pass@1."""
+    if summary.get("agent_score") is not None:
+        return summary["agent_score"] * 100, "Agent score"
+    return (summary.get("pass_at_1") or 0) * 100, "pass@1"
+
+
+def rank_setups(runs, labels):
+    """Markdown ranking setups *within* a comparable block, never across them.
+
+    A block is one harness in one thinking mode. That boundary is not
+    fastidiousness: this repo's own README records 67.4 through the built-in
+    loop against 79.3 through opencode on identical weights, so a table that
+    ranks an opencode row above a built-in-loop row is reporting the harness,
+    not the setup. Thinking and non-thinking are likewise two products, never
+    two candidates for one crown. Inside a block the serving config and the
+    model are the axes actually being compared, and there the winner is real --
+    subject to the sample-count noise floor, which every block states.
+    """
+    S = [r["summary"] for r in runs]
+    setups = [_setup_of(r) for r in runs]
+    blocks = {}
+    for i, st in enumerate(setups):
+        blocks.setdefault((st["harness"], st["thinking"]), []).append(i)
+
+    out = ["## Ranked setups\n"]
+    out.append("A setup is the serving config, the harness and the thinking mode "
+               "together. Scores are ranked **within** one harness and one thinking "
+               "mode and nowhere else: the same weights score differently through "
+               "different harnesses (67.4 through the built-in loop against 79.3 "
+               "through opencode, in this repo's own results), and thinking and "
+               "non-thinking are two products, not two candidates. There is "
+               "deliberately no single cross-harness winner below.\n")
+
+    for (harness, thinking), idx in blocks.items():
+        metric = "Agent score" if all(S[i].get("agent_score") is not None
+                                      for i in idx) else "pass@1"
+        scored = sorted(idx, key=lambda i: -_score_of(S[i])[0])
+        out.append(f"### {harness} · thinking {'ON' if thinking else 'OFF'}\n")
+        out.append(f"| Rank | Serving config | Model | {metric} | Samples |\n"
+                   "|---|---|---|---|---|")
+        for rank, i in enumerate(scored, 1):
+            st = setups[i]
+            value = (_score_of(S[i])[0] if metric == "Agent score"
+                     else (S[i].get("pass_at_1") or 0) * 100)
+            cell = f"**{value:.1f}**" if rank == 1 else f"{value:.1f}"
+            name = f"**{labels[i]}**" if rank == 1 else labels[i]
+            out.append(f"| {rank} | `{st['config']}` | {st['model']} — {name} "
+                       f"| {cell} | {st['samples']} |")
+        out.append("")
+        best = scored[0]
+        best_v = _score_of(S[best])[0]
+        samples = setups[best]["samples"]
+        if len(scored) == 1:
+            out.append(f"**Winner: {labels[best]}** — the only setup in this block, "
+                       "so this is a measurement, not a comparison.\n")
+            continue
+        runner_up = scored[1]
+        margin = best_v - _score_of(S[runner_up])[0]
+        verdict = (f"**Winner: {labels[best]}** — {best_v:.1f} against "
+                   f"{_score_of(S[runner_up])[0]:.1f} for {labels[runner_up]}, "
+                   f"a margin of {margin:.1f} points. ")
+        if margin < NOISE_POINTS:
+            verdict += (f"That is **inside the ~{NOISE_POINTS:.0f}-point noise floor** at "
+                        f"{samples} samples per task — treat it as a tie and re-run "
+                        "with more samples before acting on it.")
+        else:
+            verdict += (f"That clears the ~{NOISE_POINTS:.0f}-point noise floor at "
+                        f"{samples} samples per task.")
+        out.append(verdict + "\n")
+    return "\n".join(out)
+
+
+def build(runs, title, question=None, verdict=None, notes=None, short_labels=None,
+          setups=False):
     """runs: list of loaded result dicts. Returns Markdown source."""
     labels = [_label(r) for r in runs]
     short = short_labels or [_short(r, line) for r, line in zip(runs, labels)]
@@ -186,6 +286,9 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     elif agentic:
         out.append("<sub>*Valid calls* = tool calls that did not error. *Turn-limit* = runs "
                    "abandoned after exhausting the turn budget without finishing.</sub>\n")
+
+    if setups:
+        out.append(rank_setups(runs, labels))
 
     # --- charts ---
     out.append(_chart("Solve rate (%)" if agentic else "pass@1 (%)",
