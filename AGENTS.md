@@ -40,7 +40,7 @@ Do not proceed until `/models` returns the model you intend to test.
 ## Step 1 — install and prove the tests
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ./bench validate                  # must print 28/28
 ./bench validate --suite agentic-all   # must print 16/16
 ```
@@ -105,7 +105,7 @@ Otherwise point `BENCH_BASE_URL` at each endpoint in turn and use `./bench run`.
 ## Step 5 — decide, and write it down
 
 ```bash
-./bench report results/<date>-<name>/run-*.json \
+./bench report results/<date>-<name>/*.json \
   --title "..." --question "..." --verdict "..." --notes analysis.md
 ```
 
@@ -176,9 +176,13 @@ the secondary gemma backend). `bench configs` marks each one and says why; namin
 
 ## Step 7 — install the winner
 
+`bench configs` is safe on any machine. **`bench apply` requires the serving host** — it
+rewrites `start-qwen.sh`, and with `--restart` it takes the shared endpoint down for
+several minutes. Get human approval before running it.
+
 ```bash
-./bench configs
-./bench apply <config-name> --restart
+./bench configs                          # safe anywhere
+./bench apply <config-name> --restart    # serving host only; restarts vllm-qwen
 ```
 
 Then add a row to `configs/README.md` with the measured numbers. A config with no measured

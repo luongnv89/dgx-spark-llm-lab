@@ -15,7 +15,7 @@ service.
 ```bash
 git clone https://github.com/luongnv89/dgx-spark-llm-lab.git
 cd dgx-spark-llm-lab
-pip install -r requirements.txt        # just `openai`
+pip install -e .                       # openai + aiohttp
 ```
 
 ## 2. Point it at a server
@@ -47,6 +47,20 @@ broken — fix it before reading any model score.
 Results land in `results/<today>/<label>.json` and the pass/fail of every generation
 streams to the terminal as it happens.
 
+`results/` is append-only: one dated directory per campaign, and a superseded campaign
+stays on disk next to the one that replaced it. Never delete or overwrite a campaign
+directory.
+
+The two oldest campaigns — `results/2026-08-17-thinking-mode/` and
+`results/2026-08-18-vllm-vs-ollama/` — each carry their own copy of the harness that
+produced them (`bench.py`, `tasks.py`, `validate.py`, plus a few campaign-specific
+probes). **Those duplicates are a deliberate freeze, not drift.** They predate the
+`benchkit/` package, so there is no current root-level `bench.py` for them to have
+drifted from — shipping the harness alongside its own results is the only thing that
+keeps those two campaigns reproducible. Campaigns from `2026-08-20` onward contain
+only `REPORT.md`, the run JSON and logs, because `benchkit/` in the repo is the
+harness that produced them.
+
 Useful flags:
 
 | Flag | Default | Notes |
@@ -68,12 +82,16 @@ campaigns in `results/`.
 ## 5. Build the report
 
 ```bash
-./bench report results/2026-08-20-*/run-*.json \
+./bench report results/<today>/my-model-think-*.json \
   --title "My model vs the incumbent" \
   --question "Should we swap?" \
   --verdict "No — ties on accuracy, doubles the latency." \
-  --notes my-analysis.md
+  --out results/<today>/REPORT.md
 ```
+
+`--notes <file.md>` splices your own written analysis into the report. `bench report`
+refuses to overwrite an existing `REPORT.md`, so pass `--out` or `--force` when you
+re-run it against a directory that already has one.
 
 Writes `REPORT.md` next to the results: a setup table, a per-run results table, four
 mermaid charts (pass@1, wall-clock, output tokens, accuracy by difficulty), a per-task

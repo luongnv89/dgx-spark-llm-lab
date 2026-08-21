@@ -62,7 +62,9 @@ curl -s localhost:8001/v1/chat/completions \
   -d '{"model":"montimage-dgx-spark","messages":[{"role":"user","content":"hi"}]}'
 
 # thinking off for this request (default is ON)
-  -d '{"model":"montimage-dgx-spark","messages":[...],
+curl -s localhost:8001/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"montimage-dgx-spark","messages":[{"role":"user","content":"hi"}],
        "chat_template_kwargs":{"enable_thinking":false}}'
 ```
 

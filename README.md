@@ -103,7 +103,7 @@ Run a suite:
 Build the report:
 
 ```bash
-./bench report results/*/run-*.json --title "My model" --verdict "..."
+./bench report results/*/my-model-think-*.json --title "My model" --verdict "..."
 ```
 
 `validate` must print `28/28` (and `--suite agentic-all` must print `16/16`). If it does

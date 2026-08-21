@@ -51,7 +51,9 @@ accept it, and none of them writes to your own configuration to do it:
 | `pi` | a throwaway catalogue in the run's temp dir holding one synthetic provider and nothing else, handed over as `PI_CODING_AGENT_DIR` |
 
 In this mode the harness catalogue does not apply, so `--model` must name the id that
-endpoint serves — it is checked against the endpoint's `/models` before the run starts:
+endpoint serves — it is checked against the endpoint's `/models` before the run starts.
+`montimage-dgx-spark` below is the id *this* DGX serves; use whatever your own
+`/v1/models` reports:
 
 ```bash
 ./bench harness run --harness opencode --endpoint http://localhost:8001/v1 \
@@ -113,6 +115,10 @@ adapter to configure. `list_models()` shells out to `pi --list-models` and retur
 provider/model pairs it prints; `available()` then re-checks the choice against
 `~/.pi/agent/models.json` before a run rather than after a confusing result.
 
+`local-dgx/montimage-dgx-spark` is the entry *this* box's pi catalogue holds for the
+local vLLM. On your machine, substitute a `provider/model` pair that
+`./bench harness models` actually reports.
+
 ```bash
 ./bench harness models --harness pi
 ./bench harness run --harness pi -m local-dgx/montimage-dgx-spark
@@ -145,7 +151,9 @@ best-effort. A model that needs a particular `compat.thinkingFormat` (the local 
 
 ### Thinking
 
-`--thinking off` / `--thinking high`, selected by the `--thinking` flag as everywhere else.
+The adapter passes pi `--thinking off` or `--thinking high`, chosen by benchkit's own
+`--thinking` flag — which is a boolean switch, so you write `--thinking`, not
+`--thinking high`.
 pi maps those onto whatever the provider's `compat.thinkingFormat` says; for the local
 provider that is `qwen-chat-template`, i.e. the same `enable_thinking` kwarg the direct
 suites toggle.
