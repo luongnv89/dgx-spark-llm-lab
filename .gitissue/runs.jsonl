@@ -1,0 +1,7 @@
+{"ts": "2026-08-21T01:00:00Z", "issue": 6, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 46, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 97}
+{"ts": "2026-08-21T01:02:00Z", "issue": 7, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 47, "qa_cycles": 0, "complexity": "M", "profile": "resolver", "duration_s": 146}
+{"ts": "2026-08-21T01:02:00Z", "issue": 8, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 48, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 102}
+{"ts": "2026-08-21T01:04:00Z", "issue": 9, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 49, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 152}
+{"ts": "2026-08-21T01:06:00Z", "issue": 10, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 50, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 3560}
+{"ts": "2026-08-21T01:08:00Z", "issue": 11, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 51, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 175}
+{"ts": "2026-08-21T01:08:00Z", "issue": 12, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 52, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 535}

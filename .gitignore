@@ -8,3 +8,8 @@ __pycache__/
 
 # Transient service logs (benchmark logs under benchmarks/ ARE tracked)
 vllm-qwen-restore.log
+
+# Python packaging build artifacts
+*.egg-info/
+build/
+dist/
