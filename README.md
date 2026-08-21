@@ -28,8 +28,9 @@ serve, not a number you quote:
 - **Two workload shapes.** One-shot code generation *and* multi-turn agentic tool calling,
   because they disagree.
 - **Your harness and your models, not ours.** `bench harness models` lists what your
-  opencode or pi install can already reach; pick one and benchmark it. Nothing is written to
-  your editor's configuration.
+  opencode or pi install can already reach; pick one and benchmark it. A model neither knows
+  about is reachable with `--endpoint <url>` on any of the three harnesses. Nothing is
+  written to your editor's configuration either way.
 - **Your harness, not ours.** The same model scores 12 points apart through four different
   tool loops, so the suites also run through the coding agent you actually use (`pi`,
   `opencode`, `claude-code`).

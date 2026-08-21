@@ -40,21 +40,25 @@ never write to it. The one exception is `--endpoint`.
 
 ### `--endpoint`: a server the harness does not know about
 
-For a local vLLM or llama.cpp that is not in your opencode config, `--endpoint
-http://host:port/v1` points the harness at it **for this run only** — opencode gets a
-throwaway provider config next to the temp workspace, Claude Code gets `ANTHROPIC_BASE_URL`
-and a throwaway config home. Your real config is untouched either way. In this mode the
-harness catalogue does not apply, so `--model` must name the id that endpoint serves:
+For a local vLLM or llama.cpp that is not in your harness config, `--endpoint
+http://host:port/v1` points the harness at it **for this run only**. All three harnesses
+accept it, and none of them writes to your own configuration to do it:
+
+| Harness | How the endpoint is injected |
+|---|---|
+| `opencode` | a throwaway provider config next to the temp workspace, handed over as `OPENCODE_CONFIG` |
+| `claude-code` | `ANTHROPIC_BASE_URL` plus a throwaway `CLAUDE_CONFIG_DIR` |
+| `pi` | a throwaway catalogue in the run's temp dir holding one synthetic provider and nothing else, handed over as `PI_CODING_AGENT_DIR` |
+
+In this mode the harness catalogue does not apply, so `--model` must name the id that
+endpoint serves — it is checked against the endpoint's `/models` before the run starts:
 
 ```bash
 ./bench harness run --harness opencode --endpoint http://localhost:8001/v1 \
     -m montimage-dgx-spark --suite agentic-hard
+./bench harness run --harness pi --endpoint http://localhost:8001/v1 \
+    -m montimage-dgx-spark --suite agentic-hard
 ```
-
-pi has no `--endpoint` mode and says so rather than pretending: it resolves models only
-through its own catalogue, and silently writing a provider into `~/.pi/agent/models.json`
-would change how the user's editor behaves. Add the endpoint to pi once, the normal way, and
-it shows up in `bench harness models` like everything else.
 
 The label and result filename carry the model, not just the harness — `opencode
 ollama-qwen3-coder-latest think-OFF` — because benchmarking two models through one harness is
@@ -114,6 +118,30 @@ provider/model pairs it prints; `available()` then re-checks the choice against
 ./bench harness run --harness pi -m local-dgx/montimage-dgx-spark
 ./bench harness run --harness pi --provider local-dgx -m montimage-dgx-spark   # equivalent
 ```
+
+### Pointing it at an endpoint it has never heard of
+
+pi takes no base URL on the command line, so `--endpoint` is served the same way the other
+two adapters serve it: with a throwaway config the run owns. `prepare()` writes a catalogue
+into the run's temp directory holding a single synthetic `benchkit` provider of
+`api: openai-completions` pointed at the endpoint, and exports `PI_CODING_AGENT_DIR` for the
+subprocess only.
+
+Your `~/.pi/agent/models.json` is never written, and in endpoint mode never even read: your
+own providers are deliberately left out of the staged catalogue, so no `apiKey` of yours is
+duplicated into a temp directory and nothing in the run can reach a model other than the one
+being benchmarked. A run *without* `--endpoint` stages nothing at all and uses your own
+catalogue and credentials unchanged. The staged catalogue lives in a *sibling* of the
+workspace, so it never appears in the directory that gets read back and scored, and its path
+comes from that task's own temp dir — tasks run on a thread pool and must not share it.
+
+```bash
+./bench harness run --harness pi --endpoint http://localhost:8001/v1 -m montimage-dgx-spark
+```
+
+One caveat: the staged provider describes a plain OpenAI-compatible server, so thinking is
+best-effort. A model that needs a particular `compat.thinkingFormat` (the local Qwen wants
+`qwen-chat-template`) is still better added to pi's own catalogue and selected with `-m`.
 
 ### Thinking
 
