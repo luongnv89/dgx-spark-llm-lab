@@ -25,6 +25,9 @@ jobs:
       - name: Run mypy
         run: uv run mypy benchkit router.py --ignore-missing-imports
 
+      - name: Audit dependencies (pip-audit)
+        run: uv run pip-audit -r requirements.txt
+
       - name: Run unit tests with coverage
         run: uv run coverage run --source=benchkit --parallel-mode -m unittest discover -s tests -t .
 

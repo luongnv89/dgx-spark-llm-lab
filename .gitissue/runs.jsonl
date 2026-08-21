@@ -5,3 +5,7 @@
 {"ts": "2026-08-21T01:06:00Z", "issue": 10, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 50, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 3560}
 {"ts": "2026-08-21T01:08:00Z", "issue": 11, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 51, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 175}
 {"ts": "2026-08-21T01:08:00Z", "issue": 12, "mode": "explicit", "skill": "auto-pilot", "outcome": "merged", "pr": 52, "qa_cycles": 0, "complexity": "S", "profile": "resolver", "duration_s": 535}
+{"ts":"2026-08-21T13:30:59Z","issue":6,"mode":"balanced","skill":"auto-pilot","outcome":"in_progress","pr":null,"qa_cycles":null,"complexity":null,"profile":null,"duration_s":null}
+{"ts":"2026-08-21T13:32:52Z","issue":6,"mode":"balanced","skill":"auto-pilot","outcome":"skipped","pr":null,"qa_cycles":0,"complexity":"low","profile":null,"duration_s":12,"skipped_reason":"already_resolved"}
+{"ts":"2026-08-21T13:34:53Z","issue":9,"mode":"balanced","skill":"auto-pilot","outcome":"skipped","pr":null,"qa_cycles":0,"complexity":"low","profile":null,"duration_s":10,"skipped_reason":"already_resolved"}
+{"ts":"2026-08-21T13:36:45Z","issue":12,"mode":"balanced","skill":"auto-pilot","outcome":"skipped","pr":null,"qa_cycles":0,"complexity":"low","profile":null,"duration_s":15,"skipped_reason":"already_resolved"}

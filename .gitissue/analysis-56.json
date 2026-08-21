@@ -1,0 +1,467 @@
+{
+  "issue": {
+    "number": 56,
+    "title": "Add an endpoint mode to the pi harness",
+    "type": "feature",
+    "reporter": {
+      "login": "luongnv89",
+      "name": "Luong NGUYEN"
+    },
+    "labels": [
+      "enhancement",
+      "scope:harness",
+      "effort:M"
+    ],
+    "state": "open",
+    "createdAt": "2026-08-21T07:18:30Z",
+    "updatedAt": "2026-08-21T07:18:30Z"
+  },
+  "research_status": {
+    "already_resolved": false,
+    "pr_in_progress": false,
+    "possibly_already_fixed": false,
+    "resolution_details": null
+  },
+  "extraction": {
+    "error_messages": [
+      "the pi harness has no explicit-endpoint mode: pi resolves models through its own catalogue. Add the endpoint to pi's models.json once, then select it with --model <provider>/<model>."
+    ],
+    "functions": [
+      "PiHarness.__init__",
+      "PiHarness._env",
+      "PiHarness._catalogue",
+      "PiHarness._catalogue_path",
+      "PiHarness.prepare",
+      "cmd_harness",
+      "_endpoint_kw"
+    ],
+    "classes": [
+      "PiHarness",
+      "OpenCodeHarness",
+      "ClaudeCodeHarness",
+      "Harness"
+    ],
+    "file_refs": [],
+    "modules": [
+      "benchkit.harness.pi",
+      "benchkit.harness.opencode",
+      "benchkit.harness.claudecode",
+      "benchkit.harness.base",
+      "benchkit.cli"
+    ],
+    "keywords": [
+      "endpoint",
+      "pi harness",
+      "PI_CODING_AGENT_DIR",
+      "models.json",
+      "--endpoint",
+      "mutate",
+      "catalogue",
+      "throwaway config"
+    ]
+  },
+  "affected_files": [
+    {
+      "path": "benchkit/harness/pi.py",
+      "relevance": "critical",
+      "role": "PiHarness.__init__ (56-67) raises SystemExit at 58-62 whenever base_url is truthy; module docstring 38-41 justifies the refusal; _env (81-86) and _catalogue_path (114-116) already read PI_CODING_AGENT_DIR - the seam the fix reuses",
+      "match_reasons": [
+        "the refusal lives here",
+        "named component in the issue"
+      ]
+    },
+    {
+      "path": "benchkit/harness/opencode.py",
+      "relevance": "high",
+      "role": "Reference implementation: prepare() (154-171) + _config() (173-190) write a throwaway config and hand it over via OPENCODE_CONFIG; uses_endpoint (60-63); DEFAULT_ENDPOINT_PROVIDER (42)",
+      "match_reasons": [
+        "pattern to mirror"
+      ]
+    },
+    {
+      "path": "benchkit/harness/claudecode.py",
+      "relevance": "high",
+      "role": "Second reference: throwaway CLAUDE_CONFIG_DIR written only in endpoint mode (204-216); env set only if uses_endpoint (241-253)",
+      "match_reasons": [
+        "pattern to mirror"
+      ]
+    },
+    {
+      "path": "benchkit/cli.py",
+      "relevance": "critical",
+      "role": "cmd_harness (167-252); _endpoint_kw (255-259) takes a harness name but ignores it and its docstring is now stale; --endpoint help at :372 says 'pi does not support it'",
+      "match_reasons": [
+        "endpoint wiring and stale help text"
+      ]
+    },
+    {
+      "path": "tests/test_harness_models.py",
+      "relevance": "critical",
+      "role": "test_pi_rejects_an_endpoint_rather_than_ignoring_it (123-126) pins the refusal and must be replaced; test_no_endpoint_unless_asked (110-114) should gain a pi case",
+      "match_reasons": [
+        "codifies the behavior being changed"
+      ]
+    },
+    {
+      "path": "docs/HARNESSES.md",
+      "relevance": "high",
+      "role": "Lines 54-57 state 'pi has no --endpoint mode'; the pi section (87-121) needs an endpoint subsection mirroring opencode's (41-52)",
+      "match_reasons": [
+        "acceptance criterion: docs must stop saying pi cannot take one"
+      ]
+    },
+    {
+      "path": ".env.example",
+      "relevance": "medium",
+      "role": "BENCH_HARNESS_ENDPOINT comment (41-44) says 'Not supported by the pi harness'",
+      "match_reasons": [
+        "stale doc claim"
+      ]
+    },
+    {
+      "path": "benchkit/harness/base.py",
+      "relevance": "medium",
+      "role": "Harness.prepare(container) (67-74) / excluded_files (76-77) - the extension point a temp PI_CODING_AGENT_DIR should hang off",
+      "match_reasons": [
+        "shared adapter contract"
+      ]
+    },
+    {
+      "path": "README.md",
+      "relevance": "low",
+      "role": "Harness usage/framing lines 21-34, 105-107",
+      "match_reasons": [
+        "doc consistency"
+      ]
+    },
+    {
+      "path": "AGENTS.md",
+      "relevance": "low",
+      "role": "Line 135 already describes --endpoint harness-generically; must become true for pi",
+      "match_reasons": [
+        "doc consistency"
+      ]
+    },
+    {
+      "path": "CLAUDE.md",
+      "relevance": "low",
+      "role": "PI_CODING_AGENT_DIR env row - the var the fix reuses",
+      "match_reasons": [
+        "doc consistency"
+      ]
+    },
+    {
+      "path": "benchkit/harness/models.py",
+      "relevance": "low",
+      "role": "Docstring framing of 'existing setup vs explicit endpoint' (8-17) should stay accurate",
+      "match_reasons": [
+        "doc consistency"
+      ]
+    }
+  ],
+  "analysis": {
+    "type_specific": "architecture_fit",
+    "summary": "This is a deliberate refusal, not a missing capability. PiHarness.__init__ (benchkit/harness/pi.py:58-62) raises SystemExit the moment base_url is set, and the module docstring (38-41) argues the case: writing a provider into the user's ~/.pi/agent/models.json would change how their editor behaves. The premise is right; the conclusion does not follow, and the repo already disproves it twice. Both sibling adapters solve the same problem the same way: opencode writes a throwaway config beside the temp workspace and points the tool at it with OPENCODE_CONFIG (opencode.py:154-190), and claude-code writes a throwaway CLAUDE_CONFIG_DIR only when uses_endpoint is set (claudecode.py:204-216, 241-253). pi has the identical seam already wired: _catalogue_path() (pi.py:114-116) resolves PI_CODING_AGENT_DIR before ~/.pi/agent, and _env() (81-86) already injects PI_CODING_AGENT_DIR into the subprocess environment when self.agent_dir is set. The feature is therefore an extension along an existing axis, not a new architecture.",
+    "details": "Data flow today: cmd_harness reads endpoint from --endpoint or BENCH_HARNESS_ENDPOINT (cli.py:185), passes it through _endpoint_kw (255-259) which returns {'base_url': endpoint} for any harness regardless of the name it is given, then constructs H.get(args.harness, base_url=...) - and PiHarness dies in its constructor before model resolution. Target flow: PiHarness stores base_url, exposes uses_endpoint, and in prepare() copies the user's catalogue (read-only) into the run's temp dir, adds one synthetic OpenAI-compatible provider pointing at the endpoint, writes that copy, and sets PI_CODING_AGENT_DIR to the temp dir for the subprocess only. Nothing under the user's home is opened for writing. Two constraints fall out. First, the injected provider must satisfy _provider_addressable() (pi.py:190-195) so _argv() (176-188) passes --provider/--model correctly. Second, the endpoint path must skip _catalogue()-based validation, since the served model is not in the user's catalogue - opencode's available() endpoint branch (122-133), which probes the OpenAI-compatible /models URL directly, is the precedent. Note on the repo hard rules: tests/test_harness_models.py:123-126 must be rewritten, but that is a harness unit test, not a benchmark task's tests/asserts/check - the 'never edit a task's tests to make a model pass' rule does not apply."
+  },
+  "options": [
+    {
+      "number": 1,
+      "name": "Temp catalogue in PiHarness only",
+      "summary": "Drop the refusal, stage a throwaway models.json in prepare(), and point pi at it with PI_CODING_AGENT_DIR.",
+      "files_to_modify": [
+        {
+          "path": "benchkit/harness/pi.py",
+          "changes": "Store base_url instead of raising; add uses_endpoint; in prepare() copy the resolved catalogue, inject one synthetic endpoint provider, write it into the run temp dir and set agent_dir; make available() probe the endpoint's /v1/models in endpoint mode; rewrite the docstring"
+        },
+        {
+          "path": "benchkit/cli.py",
+          "changes": "Drop 'pi does not support it' from the --endpoint help (:372)"
+        },
+        {
+          "path": "tests/test_harness_models.py",
+          "changes": "Replace test_pi_rejects_an_endpoint_rather_than_ignoring_it with a test that pi accepts an endpoint and mutates nothing under the real catalogue path"
+        }
+      ],
+      "files_to_create": [],
+      "test_strategy": "unittest: construct PiHarness(base_url=..., provider=..., model=...), run prepare() against a temp container, assert the temp models.json holds the endpoint provider and that the real ~/.pi/agent/models.json (pointed at a fixture dir via PI_CODING_AGENT_DIR) is byte-identical afterwards.",
+      "pros": [
+        "Directly satisfies AC1, AC2 and AC4",
+        "Confined to one adapter"
+      ],
+      "cons": [
+        "Leaves docs/HARNESSES.md, .env.example and models.py still claiming pi cannot take an endpoint, failing AC3",
+        "_endpoint_kw's stale 'not every harness can take one' docstring stays misleading"
+      ],
+      "complexity": "M",
+      "risk": "Medium",
+      "risk_details": "Correct but incomplete against the stated acceptance criteria",
+      "recommended": false,
+      "rejection_reason": "Ships the capability but leaves four documents asserting the opposite, failing acceptance criterion 3."
+    },
+    {
+      "number": 2,
+      "name": "Endpoint mode plus consistent three-harness contract and docs",
+      "summary": "Implement the temp-catalogue endpoint mode in pi, make _endpoint_kw and the three adapters agree on the --endpoint contract, and correct every doc that says pi cannot take one.",
+      "files_to_modify": [
+        {
+          "path": "benchkit/harness/pi.py",
+          "changes": "As option 1: remove the SystemExit (58-62), store base_url, add uses_endpoint, stage a throwaway catalogue in prepare() via the existing PI_CODING_AGENT_DIR seam (_env 81-86, _catalogue_path 114-116), inject a synthetic provider that satisfies _provider_addressable (190-195), probe the endpoint in available(), rewrite the docstring (38-41)"
+        },
+        {
+          "path": "benchkit/cli.py",
+          "changes": "Update _endpoint_kw's docstring (255-259) now that all three harnesses accept an endpoint; drop 'pi does not support it' from --endpoint help (:372); keep the existing '--endpoint needs --model' guard (203-204) applying uniformly"
+        },
+        {
+          "path": "tests/test_harness_models.py",
+          "changes": "Replace the refusal test with acceptance + non-mutation tests; extend test_no_endpoint_unless_asked to cover pi so the no-endpoint path still uses the user's own catalogue and credentials (AC4)"
+        },
+        {
+          "path": "docs/HARNESSES.md",
+          "changes": "Rewrite 54-57 and add an endpoint subsection to the pi section (87-121) mirroring opencode's (41-52)"
+        },
+        {
+          "path": ".env.example",
+          "changes": "Remove 'Not supported by the pi harness' from the BENCH_HARNESS_ENDPOINT comment (41-44)"
+        },
+        {
+          "path": "README.md",
+          "changes": "Align the harness/endpoint framing"
+        },
+        {
+          "path": "AGENTS.md",
+          "changes": "Confirm the Step 6 --endpoint text now holds for all three harnesses"
+        },
+        {
+          "path": "benchkit/harness/models.py",
+          "changes": "Docstring only (8-17)"
+        }
+      ],
+      "files_to_create": [],
+      "test_strategy": "unittest in the repo's existing style: (a) PiHarness(base_url=...) no longer raises; (b) prepare() writes a catalogue into the run temp dir containing the endpoint provider; (c) the fixture catalogue pointed at by PI_CODING_AGENT_DIR is unchanged byte-for-byte after a prepared run (AC2); (d) PiHarness() with no base_url sets no PI_CODING_AGENT_DIR override and still reads the user's catalogue (AC4); (e) the existing TestHarnessDefaults guarantees still hold for all three adapters.",
+      "pros": [
+        "Satisfies all four acceptance criteria including the docs one",
+        "Makes the --endpoint contract uniform across pi, opencode and claude-code",
+        "Reuses two proven in-repo patterns rather than inventing a third",
+        "Mutates nothing under the user's home"
+      ],
+      "cons": [
+        "Touches eight files, four of them docs",
+        "Endpoint-mode pi cannot be validated against the user's catalogue, so a bad --model surfaces later than it does today"
+      ],
+      "complexity": "M",
+      "risk": "Medium",
+      "risk_details": "Behavior change in a user-facing refusal plus a rewritten test; contained by the fact that the no-endpoint path is untouched and opencode/claude-code already prove the mechanism",
+      "recommended": true
+    },
+    {
+      "number": 3,
+      "name": "Extract a shared endpoint-config mixin across all three adapters",
+      "summary": "Factor the throwaway-config-plus-env-var pattern out of opencode, claude-code and pi into one shared base helper, then implement pi on top of it.",
+      "files_to_modify": [
+        {
+          "path": "benchkit/harness/base.py",
+          "changes": "Add a shared endpoint/throwaway-config helper"
+        },
+        {
+          "path": "benchkit/harness/pi.py",
+          "changes": "Implement on the shared helper"
+        },
+        {
+          "path": "benchkit/harness/opencode.py",
+          "changes": "Migrate to the shared helper"
+        },
+        {
+          "path": "benchkit/harness/claudecode.py",
+          "changes": "Migrate to the shared helper"
+        },
+        {
+          "path": "tests/test_harness_models.py",
+          "changes": "Rewrite around the shared contract"
+        }
+      ],
+      "files_to_create": [],
+      "test_strategy": "Contract tests over all three adapters",
+      "pros": [
+        "Removes real triplication",
+        "Any future adapter gets endpoint mode free"
+      ],
+      "cons": [
+        "The three tools' config formats differ enough that the shared part is thin",
+        "Regresses two currently working adapters to deliver one new capability",
+        "Duplicates open refactor issues #31 and #34"
+      ],
+      "complexity": "L",
+      "risk": "High",
+      "risk_details": "Touches two working harnesses that have published benchmark numbers behind them",
+      "recommended": false,
+      "rejection_reason": "Refactors two working adapters to add one capability, and overlaps the dedicated refactor issues #31 and #34."
+    }
+  ],
+  "recommended_option": 2,
+  "overall_complexity": "M",
+  "overall_risk": "Medium",
+  "history": {
+    "related_commits": [
+      {
+        "sha": "245f520",
+        "message": "Add the pi harness adapter",
+        "author": "Luong NGUYEN",
+        "date": null,
+        "files": [
+          "benchkit/harness/pi.py"
+        ],
+        "type": "related_change"
+      },
+      {
+        "sha": "d5088ea",
+        "message": "feat(harness): benchmark any model from your own opencode/pi setup (#53)",
+        "author": "Luong NGUYEN",
+        "date": "2026-08-21T07:26:57Z",
+        "files": [
+          "benchkit/harness/pi.py",
+          "benchkit/cli.py",
+          "benchkit/harness/models.py"
+        ],
+        "type": "related_change"
+      },
+      {
+        "sha": "f97b286",
+        "message": "Add the opencode adapter, and a guard against runs that score without working",
+        "author": "Luong NGUYEN",
+        "date": null,
+        "files": [
+          "benchkit/harness/opencode.py"
+        ],
+        "type": "related_change"
+      }
+    ],
+    "regression_candidate": null,
+    "already_addressed": null,
+    "domain_experts": [
+      {
+        "author": "Luong NGUYEN",
+        "commit_count": 8
+      }
+    ]
+  },
+  "cross_references": {
+    "blocks": [],
+    "blocked_by": [],
+    "related_issues": [
+      {
+        "number": 54,
+        "title": "Epic: Benchmark any model on any harness to find the best setup",
+        "relationship": "explicit_reference",
+        "shared_keywords": [
+          "pi",
+          "endpoint",
+          "harness"
+        ],
+        "confidence": "high"
+      },
+      {
+        "number": 58,
+        "title": "Select the benchmark model from your own opencode/pi setup",
+        "relationship": "explicit_reference",
+        "shared_keywords": [
+          "pi",
+          "opencode",
+          "model selection"
+        ],
+        "confidence": "high"
+      },
+      {
+        "number": 57,
+        "title": "Sweep serving configs and harnesses in bench compare",
+        "relationship": "shared_keywords",
+        "shared_keywords": [
+          "harness",
+          "endpoint",
+          "sweep"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "number": 34,
+        "title": "Clear remaining readability issues in harness adapters",
+        "relationship": "shared_files",
+        "shared_keywords": [
+          "harness adapters"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "number": 31,
+        "title": "Extract the parse_events skeleton from harness adapters",
+        "relationship": "shared_files",
+        "shared_keywords": [
+          "harness adapters"
+        ],
+        "confidence": "medium"
+      },
+      {
+        "number": 32,
+        "title": "Remove the dead open_calls correlation in pi adapter",
+        "relationship": "shared_files",
+        "shared_keywords": [
+          "pi adapter"
+        ],
+        "confidence": "medium"
+      }
+    ],
+    "resolved_by": [],
+    "triage_data_available": false,
+    "triage_timestamp": null
+  },
+  "scan_stats": {
+    "files_read": 17,
+    "deps_traced": 6,
+    "keywords_extracted": 9,
+    "file_refs_extracted": 0,
+    "scan_duration_seconds": 95,
+    "scan_timed_out": false
+  },
+  "decision_record": {
+    "root_cause": "Not a missing capability but a deliberate refusal: PiHarness.__init__ (benchkit/harness/pi.py:58-62) raises SystemExit whenever base_url is set, on the correct premise that a benchmark must not rewrite ~/.pi/agent/models.json. The conclusion does not follow - opencode (OPENCODE_CONFIG) and claude-code (CLAUDE_CONFIG_DIR) both already point their tool at a throwaway config, and pi has the identical seam wired via PI_CODING_AGENT_DIR in _env (81-86) and _catalogue_path (114-116).",
+    "options_considered": [
+      {
+        "number": 1,
+        "name": "Temp catalogue in PiHarness only"
+      },
+      {
+        "number": 2,
+        "name": "Endpoint mode plus consistent three-harness contract and docs"
+      },
+      {
+        "number": 3,
+        "name": "Extract a shared endpoint-config mixin across all three adapters"
+      }
+    ],
+    "options_rejected": [
+      {
+        "number": 1,
+        "reason": "Leaves docs/HARNESSES.md, .env.example, README and models.py still saying pi cannot take an endpoint, failing acceptance criterion 3."
+      },
+      {
+        "number": 3,
+        "reason": "Refactors two working adapters to add one capability and overlaps refactor issues #31 and #34."
+      }
+    ],
+    "selected_option": {
+      "number": 2,
+      "name": "Endpoint mode plus consistent three-harness contract and docs",
+      "summary": "Copy the user's pi catalogue into the run's temp dir, inject one synthetic endpoint provider, expose it via PI_CODING_AGENT_DIR for the subprocess only, and correct every doc and test that asserts pi cannot take an endpoint."
+    },
+    "residual_risk": "In endpoint mode the model cannot be validated against the user's catalogue, so a wrong --model surfaces at run time rather than at selection time; mitigate by probing the endpoint's /v1/models in available(), as opencode already does. Rewriting tests/test_harness_models.py:123-126 is required and permitted - it is a harness unit test, not a benchmark task's tests/asserts/check."
+  },
+  "version": 1,
+  "timestamp": "2026-08-21T07:40:28Z",
+  "source": "/issue-analysis",
+  "git_state": {
+    "branch": "main",
+    "commit_sha": "fa1567555ec2d84859c74e94d366adf95f074d4f",
+    "commit_sha_short": "fa15675",
+    "captured_at": "2026-08-21T07:40:28Z"
+  }
+}

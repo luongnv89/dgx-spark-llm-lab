@@ -18,8 +18,29 @@ import os
 
 from aiohttp import ClientSession, ClientTimeout, web
 
-LISTEN_HOST = os.environ.get("ROUTER_HOST", "0.0.0.0")
+LISTEN_HOST = os.environ.get("ROUTER_HOST") or "127.0.0.1"
 LISTEN_PORT = int(os.environ.get("ROUTER_PORT", "8001"))
+ROUTER_TOKEN = os.environ.get("ROUTER_TOKEN", "")
+
+
+def _is_loopback(host: str) -> bool:
+    """Return True when *host* resolves to a loopback address."""
+    return host in ("127.0.0.1", "::1", "localhost")
+
+
+async def _auth_middleware(request: web.Request, handler) -> web.Response:
+    """Require a Bearer token when the router is bound non-loopback."""
+    if _is_loopback(LISTEN_HOST):
+        return await handler(request)
+    if not ROUTER_TOKEN:
+        return await handler(request)  # no token configured → open (local dev)
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer ") or auth[7:] != ROUTER_TOKEN:
+        return web.json_response(
+            {"error": {"message": "unauthorized", "type": "unauthorized_error"}},
+            status=401,
+        )
+    return await handler(request)
 
 # model name -> upstream base (no trailing slash), in priority order
 BACKENDS = {
@@ -184,7 +205,7 @@ async def on_stop(app: web.Application) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    app = web.Application(client_max_size=1024 ** 3)
+    app = web.Application(client_max_size=1024 ** 3, middlewares=[_auth_middleware])
     app.on_startup.append(on_start)
     app.on_cleanup.append(on_stop)
     app.router.add_get("/v1/models", handle_models)
@@ -197,7 +218,10 @@ def main() -> None:
                  "/v1/messages", "/v1/messages/count_tokens",
                  "/v1/responses"):
         app.router.add_post(path, proxy)
-    log.info("router listening on %s:%s", LISTEN_HOST, LISTEN_PORT)
+    mode = "loopback (no auth)" if _is_loopback(LISTEN_HOST) else "non-loopback"
+    if ROUTER_TOKEN:
+        mode += " + bearer token required"
+    log.info("router listening on %s:%s [%s]", LISTEN_HOST, LISTEN_PORT, mode)
     web.run_app(app, host=LISTEN_HOST, port=LISTEN_PORT, access_log=None)
 
 
