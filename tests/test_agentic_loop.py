@@ -259,6 +259,31 @@ class TestRunTask(unittest.TestCase):
 # Tests — par_calls
 # ---------------------------------------------------------------------------
 
+class TestNoToolCalls(unittest.TestCase):
+    """Regression tests for issue #15: zero tool calls must not score as solved."""
+
+    def test_no_tool_calls_scores_failed(self):
+        from benchkit.agentic.env import _no_tool_calls
+        # solved + zero calls → rejected
+        solved, detail = _no_tool_calls(True, 0)
+        self.assertFalse(solved)
+        self.assertIn("no tool calls", detail)
+
+    def test_tool_calls_allows_solve(self):
+        from benchkit.agentic.env import _no_tool_calls
+        # solved + non-zero calls → accepted
+        solved, detail = _no_tool_calls(True, 3)
+        self.assertTrue(solved)
+        self.assertIsNone(detail)
+
+    def test_unsolved_no_calls_still_fails(self):
+        from benchkit.agentic.env import _no_tool_calls
+        # not solved + zero calls → still not solved
+        solved, detail = _no_tool_calls(False, 0)
+        self.assertFalse(solved)
+        self.assertIsNone(detail)
+
+
 class TestParCalls(unittest.TestCase):
     """par_calls runs the oracle and counts tool calls."""
 

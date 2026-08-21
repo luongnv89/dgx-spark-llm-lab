@@ -15,6 +15,36 @@ import tempfile
 MAX_OUTPUT = 4000
 
 
+def _no_tool_calls(solved: bool, tool_calls: int) -> tuple[bool, str | None]:
+    """Refuse to score a run as solved when the model made zero tool calls.
+
+    A model that replies in prose with no tool calls has not done any work.
+    Returns ``(False, reason)`` when tool_calls is zero, else ``(solved, None)``.
+    """
+    if tool_calls == 0 and solved:
+        return False, "no tool calls made; the model did not do any work"
+    return solved, None
+
+
+def _safe_path(path: str) -> str:
+    """Validate and normalise a tool path.
+
+    Rejects absolute paths and ``..`` segments that would escape the sandbox.
+    Returns the cleaned path on success, raises ``ToolError`` otherwise.
+    """
+    if not path:
+        raise ToolError("path must not be empty")
+    # Reject absolute paths
+    if path.startswith("/"):
+        raise ToolError(f"absolute paths are not allowed: {path!r}")
+    # Reject path traversal
+    parts = path.split("/")
+    for part in parts:
+        if part == "..":
+            raise ToolError(f"path traversal is not allowed: {path!r}")
+    return path.strip("/")
+
+
 class ToolError(Exception):
     """Raised by a tool for a recoverable, model-visible error."""
 
@@ -55,7 +85,7 @@ class Workspace:
         return "\n".join(names)
 
     def read_file(self, path):
-        path = path.strip("/")
+        path = _safe_path(path)
         if path not in self.files:
             raise ToolError(f"no such file: {path}. Use list_files to see what exists.")
         body = self.files[path]
@@ -63,15 +93,13 @@ class Workspace:
         return "\n".join(f"{i:>4}| {line}" for i, line in enumerate(lines, 1))[:MAX_OUTPUT]
 
     def write_file(self, path, content):
-        path = path.strip("/")
-        if not path:
-            raise ToolError("path must not be empty")
+        path = _safe_path(path)
         new = path not in self.files
         self.files[path] = content
         return f"{'created' if new else 'overwrote'} {path} ({len(content)} bytes)"
 
     def edit_file(self, path, old, new):
-        path = path.strip("/")
+        path = _safe_path(path)
         if path not in self.files:
             raise ToolError(f"no such file: {path}")
         body = self.files[path]
@@ -100,7 +128,7 @@ class Workspace:
         return "\n".join(hits[:100])[:MAX_OUTPUT]
 
     def run_python(self, path):
-        path = path.strip("/")
+        path = _safe_path(path)
         if path not in self.files:
             raise ToolError(f"no such file: {path}")
         return self._materialise_and_run([sys.executable, path], sync_back=True)
@@ -114,6 +142,9 @@ class Workspace:
         d = tempfile.mkdtemp(prefix="benchkit-agentic-")
         try:
             for p, body in self.files.items():
+                # Re-validate each key before joining — a bad key cannot
+                # reach the filesystem by another route.
+                _safe_path(p)
                 full = os.path.join(d, p)
                 os.makedirs(os.path.dirname(full), exist_ok=True)
                 with open(full, "w") as f:
@@ -169,6 +200,7 @@ class Workspace:
         d = tempfile.mkdtemp(prefix="benchkit-check-")
         try:
             for p, body in dict(self.files, **(extra_files or {})).items():
+                _safe_path(p)
                 full = os.path.join(d, p)
                 os.makedirs(os.path.dirname(full), exist_ok=True)
                 with open(full, "w") as f:

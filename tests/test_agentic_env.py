@@ -129,8 +129,9 @@ class TestReadFile(unittest.TestCase):
         out = ws.read_file("big.txt")
         self.assertLessEqual(len(out), env.MAX_OUTPUT)
 
-    def test_strips_leading_slash(self):
-        self.ws.read_file("/a.txt")  # should not raise
+    def test_rejects_absolute_path(self):
+        with self.assertRaises(env.ToolError):
+            self.ws.read_file("/a.txt")
 
 
 class TestWriteFile(unittest.TestCase):
@@ -152,9 +153,9 @@ class TestWriteFile(unittest.TestCase):
         with self.assertRaises(env.ToolError):
             self.ws.write_file("", "x")
 
-    def test_strips_leading_slash(self):
-        self.ws.write_file("/new.txt", "c")
-        self.assertIn("new.txt", self.ws.files)
+    def test_rejects_absolute_path(self):
+        with self.assertRaises(env.ToolError):
+            self.ws.write_file("/new.txt", "c")
 
 
 class TestEditFile(unittest.TestCase):
@@ -178,9 +179,9 @@ class TestEditFile(unittest.TestCase):
         with self.assertRaises(env.ToolError):
             ws.edit_file("dup.txt", "x", "y")
 
-    def test_strips_leading_slash(self):
-        self.ws.edit_file("/a.txt", "line2", "replaced")
-        self.assertIn("replaced", self.ws.files["a.txt"])
+    def test_rejects_absolute_path(self):
+        with self.assertRaises(env.ToolError):
+            self.ws.edit_file("/a.txt", "line2", "replaced")
 
 
 class TestSearch(unittest.TestCase):
@@ -274,6 +275,46 @@ class TestCheck(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # call() dispatch
 # ---------------------------------------------------------------------------
+
+class TestSandboxEscape(unittest.TestCase):
+    """Regression tests for issue #14: sandbox escape via path traversal."""
+
+    def test_write_file_rejects_dotdot(self):
+        ws = env.Workspace({})
+        with self.assertRaises(env.ToolError):
+            ws.write_file("../escape.txt", "pwned")
+
+    def test_write_file_rejects_absolute_path(self):
+        ws = env.Workspace({})
+        with self.assertRaises(env.ToolError):
+            ws.write_file("/etc/passwd", "root:x:0:0")
+
+    def test_edit_file_rejects_dotdot(self):
+        ws = env.Workspace({"a.txt": "hello"})
+        with self.assertRaises(env.ToolError):
+            ws.edit_file("../a.txt", "hello", "world")
+
+    def test_read_file_rejects_dotdot(self):
+        ws = env.Workspace({"a.txt": "hello"})
+        with self.assertRaises(env.ToolError):
+            ws.read_file("../a.txt")
+
+    def test_run_python_rejects_dotdot(self):
+        ws = env.Workspace({})
+        with self.assertRaises(env.ToolError):
+            ws.run_python("../escape.py")
+
+    def test_nested_dotdot_rejected(self):
+        ws = env.Workspace({})
+        with self.assertRaises(env.ToolError):
+            ws.write_file("a/b/../../escape.txt", "pwned")
+
+    def test_normal_relative_path_works(self):
+        ws = env.Workspace({})
+        out = ws.write_file("sub/dir/file.txt", "content")
+        self.assertIn("created", out)
+        self.assertEqual(ws.files["sub/dir/file.txt"], "content")
+
 
 class TestCallDispatch(unittest.TestCase):
     def test_list_files_dispatch(self):

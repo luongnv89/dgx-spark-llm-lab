@@ -10,7 +10,7 @@ import json
 import time
 from dataclasses import asdict
 
-from .env import Workspace, call
+from .env import Workspace, _no_tool_calls, call
 from .tools import TOOLS, SYSTEM
 
 MAX_TURNS = 25
@@ -111,11 +111,17 @@ def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
         solved, detail = False, f"check raised {e!r}"
 
     total_calls = len(ws.calls)
+    # A model that replies in prose with no tool calls has not done any work.
+    solved, new_detail = _no_tool_calls(solved, total_calls)
+    if new_detail:
+        solved = False
+        detail = new_detail
+
     par = par_calls(task)
     # Efficiency only means something for a solved task: failing in three calls is
     # not efficient. Capped at 1.0 so beating par cannot inflate a weak run.
     efficiency = (min(1.0, par / total_calls) if (solved and par and total_calls) else
-                  (1.0 if solved and not total_calls else None))
+                  (1.0 if solved else None))
     return dict(
         par_calls=par, efficiency=efficiency,
         task=task["id"], difficulty=task["difficulty"], sample=sample,

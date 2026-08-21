@@ -111,7 +111,12 @@ def run_task(harness, task, sample, timeout=900, thinking=False, keep_dir=False)
                 detail = f"harness produced no work ({hr.stop_reason}); not counted as solved"
             solved = False
 
-        from ..agentic.loop import par_calls
+        from ..agentic.loop import _no_tool_calls, par_calls
+        # A model that replies in prose with no tool calls has not done any work.
+        solved, extra = _no_tool_calls(solved, hr.tool_calls)
+        if extra:
+            solved = False
+            detail = extra
         par = par_calls(task)
         efficiency = (min(1.0, par / hr.tool_calls)
                       if (solved and par and hr.tool_calls) else (1.0 if solved else None))
