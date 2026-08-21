@@ -46,7 +46,7 @@ gets restarted). `bench configs` marks the rest and says why:
 | `qwen3.6-35b-a3b-nvfp4` | yes | — |
 | `ornith-1.5-35b-a3b-nvfp4` | yes | — |
 | `qwen3.8-27b-nvfp4-dspark` | yes | — |
-| `qwen3.8-27b-nvfp4-tunable` | no | Parameterised `MODEL=`, and runs as `qwen38-4bit` on port 8002 — a standalone server for sweeping `K`/`DRAFTER`/`SPEC` by hand, not a `vllm-qwen` recipe |
+| `qwen3.8-27b-nvfp4-tunable` | no | No `MODEL_ID=` line (it parameterises `MODEL=` instead) — the reason `bench configs` prints. It also runs as `qwen38-4bit` on port 8002, a standalone server for sweeping `K`/`DRAFTER`/`SPEC` by hand |
 | `gemma4-12b-w4a16` | no | Runs as `vllm-gemma` on port 8802 — a secondary backend, so restarting `vllm-qwen` would not serve it |
 | `llamacpp-qwen3.8-27b-bench` | no | llama.cpp, not vLLM, and no `MODEL_ID=` line at all |
 

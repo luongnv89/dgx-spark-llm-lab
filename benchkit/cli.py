@@ -130,6 +130,11 @@ def cmd_report(args):
     md = report.build(runs, title=args.title, question=args.question,
                       verdict=args.verdict, notes=notes, setups=args.setups)
     out = args.out or os.path.join(os.path.dirname(args.results[0]), "REPORT.md")
+    if os.path.exists(out) and not args.force:
+        # results/ is append-only, and the default output path lands straight in
+        # a finished campaign's directory.
+        raise SystemExit(f"refusing to overwrite an existing report: {out}\n"
+                         "Pass --out <path> to write elsewhere, or --force.")
     with open(out, "w") as f:
         f.write(md)
     print(f"written to {out}")
@@ -297,7 +302,8 @@ def cmd_sweep(args):
         raise SystemExit("refusing to overwrite files from an earlier campaign:\n"
                          + "\n".join(f"  {p}" for p in taken)
                          + "\nGive this sweep a different --title.")
-    print(f"suite={args.suite}  {len(setups)} setups  results -> {outdir}\n")
+    print(f"suite={args.suite}  {S._n(len(setups), 'setup')}  "
+          f"results -> {outdir}\n")
 
     paths = S.run_sweep(
         setups, outdir,
@@ -500,6 +506,8 @@ def main(argv=None):
     s.add_argument("--setups", action="store_true",
                    help="add the ranked-setups section, as `bench sweep` writes it "
                         "— rebuilds a sweep's ranking from its result files")
+    s.add_argument("--force", action="store_true",
+                   help="overwrite the output file if it already exists")
     s.add_argument("--out")
     s.set_defaults(func=cmd_report)
 

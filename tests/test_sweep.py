@@ -378,6 +378,43 @@ class RankedReport(unittest.TestCase):
         self.assertIn("`cfg-a`", md)
         self.assertIn("opencode", md)
 
+    def test_no_cross_block_row_is_bolded_as_the_overall_winner(self):
+        """The Results table must not crown a harness above the section that
+        explains no cross-harness winner exists."""
+        runs = self._runs(("builtin-a", "cfg-a", "", False, 0.40),
+                          ("builtin-b", "cfg-b", "", False, 0.50),
+                          ("opencode-a", "cfg-a", "opencode", False, 0.90))
+        md = report.build(runs, title="t", setups=True)
+        results = md.split("## Results")[1].split("## Ranked setups")[0]
+        # one leader per block, so exactly two bolded rows, not one global best
+        self.assertIn("**builtin-b**", results)
+        self.assertIn("**opencode-a**", results)
+        self.assertNotIn("**builtin-a**", results)
+        self.assertIn("Bold marks the leader **within** its own harness", results)
+
+    def test_the_disagreement_table_never_pairs_two_blocks(self):
+        runs = self._runs(("builtin", "cfg-a", "", False, 0.40),
+                          ("opencode", "cfg-a", "opencode", False, 0.90))
+        for r, tasks in zip(runs, ({"t1": 1.0}, {"t1": 0.0})):
+            r["summary"]["by_task"] = tasks
+        md = report.build(runs, title="t", setups=True)
+        self.assertNotIn("Where they disagree", md)
+
+    def test_chart_labels_distinguish_setups_on_one_model(self):
+        runs = self._runs(("a", "cfg-a", "", False, 0.4),
+                          ("b", "cfg-b", "", False, 0.5),
+                          ("c", "cfg-a", "opencode", False, 0.6))
+        short = report._setup_short(runs)
+        self.assertEqual(len(set(short)), 3)
+
+    def test_the_noise_floor_follows_the_noisiest_row_in_the_block(self):
+        runs = self._runs(("a", "cfg-a", "", False, 0.40),
+                          ("b", "cfg-b", "", False, 0.50))
+        runs[0]["summary"]["config"]["samples"] = 8
+        runs[1]["summary"]["config"]["samples"] = 2
+        md = report.rank_setups(runs, ["a", "b"])
+        self.assertIn("at 2 samples per task", md)
+
     def test_build_embeds_the_ranking_when_asked(self):
         runs = self._runs(("a", "cfg-a", "", False, 0.4),
                           ("b", "cfg-b", "", False, 0.7))
@@ -420,7 +457,7 @@ class LegacyAttribution(unittest.TestCase):
             runs.append({"summary": s, "_path": f"{label}.json"})
         md = report.rank_setups(runs, ["a", "b"])
         self.assertNotIn("None samples", md)
-        self.assertIn("did not record one", md)
+        self.assertIn("assumed — not every run in this block recorded one", md)
 
 
 class NoRestartIsRefused(unittest.TestCase):
@@ -544,6 +581,25 @@ class CliWiring(unittest.TestCase):
                                  "model=montimage-dgx-spark"])
         self.assertIn("agentic suite", str(e.exception))
 
+    def test_report_refuses_to_overwrite_an_existing_report(self):
+        from benchkit import cli
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        src = os.path.join(tmp, "a.json")
+        with open(src, "w") as f:
+            json.dump(dict(summary=_summary("a"), results=[]), f)
+        out = os.path.join(tmp, "REPORT.md")
+        with open(out, "w") as f:
+            f.write("an earlier campaign")
+        with self.assertRaises(SystemExit) as e:
+            cli.main(["report", src])
+        self.assertIn("refusing to overwrite an existing report", str(e.exception))
+        with open(out) as f:
+            self.assertEqual(f.read(), "an earlier campaign")
+        cli.main(["report", src, "--force"])
+        with open(out) as f:
+            self.assertNotEqual(f.read(), "an earlier campaign")
+
     def test_report_can_rebuild_the_ranking_from_result_files(self):
         from benchkit import cli
         tmp = tempfile.mkdtemp()
@@ -569,25 +625,38 @@ class CliWiring(unittest.TestCase):
         self.assertIn("no model selected", str(e.exception))
 
     def test_the_restart_flag_is_wired_through_to_run_sweep(self):
-        """An argparse dest typo on the guardrail flag must not pass CI."""
+        """An argparse dest typo on the guardrail flag must not pass CI.
+
+        Belt and braces: `run_sweep` is stubbed *and* the real restart path is
+        stubbed, so even a refactor that moved the patch target could not turn
+        this test into a live `systemctl restart` in CI.
+        """
         from benchkit import cli
+        from benchkit import serving as real
         from benchkit import sweep as sweep_mod
-        seen = {}
+        seen, touched = {}, []
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
 
         def fake_run_sweep(setups, outdir, **kw):
             seen.update(kw)
             raise SystemExit("stop here")
 
-        orig = sweep_mod.run_sweep
+        saved = (sweep_mod.run_sweep, real.restart, real.apply_config, cli.RESULTS)
         sweep_mod.run_sweep = fake_run_sweep
+        real.restart = lambda *a, **k: touched.append("restart")
+        real.apply_config = lambda *a, **k: touched.append("apply")
+        cli.RESULTS = tmp
         try:
             with self.assertRaises(SystemExit):
                 cli.main(["sweep", "--suite", "agentic", "--yes-restart-endpoint",
                           "--title", "wiring probe",
                           "--setup", "config=qwen3.6-35b-a3b-nvfp4"])
         finally:
-            sweep_mod.run_sweep = orig
+            (sweep_mod.run_sweep, real.restart, real.apply_config,
+             cli.RESULTS) = saved
         self.assertIs(seen.get("assume_yes"), True)
+        self.assertEqual(touched, [])
 
     def test_a_same_day_report_is_never_overwritten(self):
         """_stamp() is day-granular, so two same-title sweeps share an outdir."""
