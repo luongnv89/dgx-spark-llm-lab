@@ -177,7 +177,7 @@ class TestCompareDispatch(unittest.TestCase):
             base_url="http://localhost:8001/v1", model="served-alias",
             thinking=False, both_modes=False, max_tokens=6000,
             max_tokens_think=16000, samples=1, concurrency=1,
-            test_timeout=60, max_turns=9, restore=True,
+            test_timeout=60, max_turns=9, restore=True, yes=True,
         )
 
     def _written(self):
