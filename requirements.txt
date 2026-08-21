@@ -1,2 +1,4 @@
-# The harness talks plain OpenAI-compatible HTTP; this is the only dependency.
-openai>=1.40
+# Kept in step with pyproject.toml -- `pip install -e .` is equivalent.
+# The harness talks plain OpenAI-compatible HTTP; router.py needs aiohttp.
+openai>=2.0,<3
+aiohttp>=3.8,<4

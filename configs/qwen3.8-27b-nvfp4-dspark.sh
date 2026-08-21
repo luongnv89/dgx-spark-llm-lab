@@ -4,7 +4,7 @@
 #
 # Re-swapped from Qwen3.6-35B-A3B-NVFP4 on 2026-08-20 for a trial run before a
 # final decision. Roll back with:
-#   cp start-qwen.sh.qwen36.bak start-qwen.sh && systemctl --user restart vllm-qwen
+#   ./bench apply qwen3.6-35b-a3b-nvfp4 --restart
 #
 # NOTE (2026-08-20): enable_thinking defaults to FALSE here, unlike the 08-17
 # version. Thinking ON with this vLLM chat template scored 62.5% pass@1 on the
@@ -12,9 +12,10 @@
 # scored 96.9% and 32x faster. Clients opt in per request with
 # chat_template_kwargs:{"enable_thinking":true}.
 #
-# Swapped from Qwen3.6-35B-A3B-NVFP4 on 2026-08-17. Previous version kept as
-# start-qwen.sh.qwen36.bak -- restore it and `systemctl --user restart vllm-qwen`
-# to roll back. Clients are unaffected either way: same port, same alias.
+# Swapped from Qwen3.6-35B-A3B-NVFP4 on 2026-08-17. That recipe is kept as
+# configs/qwen3.6-35b-a3b-nvfp4.sh -- roll back with
+# `./bench apply qwen3.6-35b-a3b-nvfp4 --restart`. Clients are unaffected either
+# way: same port, same alias.
 #
 # Recipe from github.com/0xBakeer/Qwen3.8-27B-4-bit-on-a-single-DGX-Spark,
 # reproduced on this machine (edit-heavy 58-61 tok/s single stream, ~234 tok/s
