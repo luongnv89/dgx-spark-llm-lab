@@ -182,8 +182,9 @@ def plan(setups, default_model=""):
     lines = []
     groups = group_by_config(setups)
     swaps = [c for c, _ in groups if c]
-    lines.append(f"{len(setups)} setups in {len(groups)} serving-config groups "
-                 f"({len(swaps)} endpoint restarts)")
+    lines.append(f"{_n(len(setups), 'setup')} in "
+                 f"{_n(len(groups), 'serving-config group')} "
+                 f"({_n(len(swaps), 'endpoint restart')})")
     for cname, group in groups:
         lines.append(f"\n  serving config: {cname or '(active launcher, no swap)'}")
         for s in group:
@@ -323,6 +324,10 @@ def run_sweep(setups, outdir, execute, serving, assume_yes=False, restart=True,
         log("\nrestoring the original serving config")
         _restore(snapshot, serving, restart, log, swallow=False)
     return paths
+
+
+def _n(count, noun):
+    return f"{count} {noun}" + ("" if count == 1 else "s")
 
 
 def _slug(s):
