@@ -91,6 +91,26 @@ class TestExecuteSuite(unittest.TestCase):
         self.assertNotIn("max_turns", self.agentic.calls[0])
 
 
+class TestWrongDispatchIsFatal(unittest.TestCase):
+    """Why dispatch matters: the one-shot runner cannot execute an agentic task.
+
+    This is the original #55 crash, isolated. It documents that routing an
+    agentic suite to `runner.run` is not merely suboptimal but fatal, so the
+    dispatch assertions above are guarding a real failure and not a style
+    preference. Read-only over the suite definitions -- no task is modified.
+    """
+
+    def test_run_tests_cannot_score_an_agentic_task(self):
+        from benchkit import runner
+        from benchkit.suites import get
+
+        task = get("agentic")[0]
+        self.assertNotIn("tests", task)
+        with self.assertRaises(KeyError) as caught:
+            runner.run_tests(task, "", timeout=1)
+        self.assertEqual(caught.exception.args[0], "tests")
+
+
 class _Args:
     def __init__(self, **kw):
         self.__dict__.update(kw)
