@@ -16,7 +16,7 @@ This runs the suites against your endpoint and ends in a config file you serve.
 suite it has been run on.
 
 ```bash
-./bench apply qwen3.6-35b-a3b-nvfp4 --restart
+./bench apply qwen3.6-35b-a3b-nvfp4 --restart   # serving host only; restarts vllm-qwen
 ```
 
 | | |
@@ -149,7 +149,7 @@ loops.
 | `./bench harness models` | Which models each can reach, from **your** config |
 | `./bench harness run --harness opencode -m <p>/<m>` | Run a suite through a real coding agent |
 | `./bench configs` | List serving recipes, and which are sweepable |
-| `./bench apply <name> [--restart]` | Install one as your live server config |
+| `./bench apply <name> [--restart]` | Install one as your live server config (serving host) |
 | `./bench compare <model>...` | DGX box only: swap, run, restore, report |
 | `./bench sweep --setup ...` | DGX box only: rank whole setups, not just models |
 
@@ -256,7 +256,7 @@ Built and used on an **NVIDIA DGX Spark (GB10)**, but the harness itself only ne
 you have a server:
 
 ```bash
-./bench apply qwen3.6-35b-a3b-nvfp4 --restart
+./bench apply qwen3.6-35b-a3b-nvfp4 --restart   # serving host only; restarts vllm-qwen
 ```
 
 Each recipe is listed with its measured pass@1 and throughput, and the reasons its flags

@@ -106,8 +106,13 @@ Otherwise point `BENCH_BASE_URL` at each endpoint in turn and use `./bench run`.
 
 ```bash
 ./bench report results/<date>-<name>/*.json \
-  --title "..." --question "..." --verdict "..." --notes analysis.md
+  --title "..." --question "..." --verdict "..." \
+  --out results/<date>-<name>/REPORT-analysis.md
 ```
+
+`bench compare` already wrote a `REPORT.md` into that directory, and `bench report`
+refuses to overwrite an existing report — pass `--out` or `--force`. `--notes <file.md>`
+splices in your own written analysis; write that file first.
 
 The verdict must be a decision, not a summary. Judge on:
 

@@ -3,7 +3,7 @@
 ## Critical commands
 
 ```bash
-pip install -r requirements.txt          # openai>=1.40
+pip install -e .                          # openai>=2, aiohttp
 ./bench validate                          # 28/28
 ./bench validate --suite agentic-all      # 16/16
 ./bench run --suite all --label "..."     # full evaluation
@@ -11,7 +11,7 @@ pip install -r requirements.txt          # openai>=1.40
 ./bench sweep --setup config=<c>,thinking=both --dry-run   # rank whole setups
 ./bench harness models                    # models your opencode/pi can reach
 ./bench harness run --harness opencode -m <p>/<m>   # benchmark one of them
-./bench apply <config> --restart          # install winner
+./bench apply <config> --restart          # install winner (serving host only)
 ```
 
 ## Toolchain floor
