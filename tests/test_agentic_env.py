@@ -3,10 +3,8 @@
 The workspace is entirely in-memory; subprocess helpers are tested via
 run_python which invokes a trivial script.  No real LLM endpoint is needed.
 """
-import subprocess
 import sys
 import unittest
-from unittest import mock
 
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(
     __import__("os").path.abspath(__file__))))
