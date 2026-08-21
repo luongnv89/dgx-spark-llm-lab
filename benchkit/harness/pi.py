@@ -182,6 +182,10 @@ class PiHarness(Harness):
         v, err = self._version()
         if err:
             return False, err
+        if self.uses_endpoint:
+            # Nothing to count: an endpoint run does not consult the catalogue,
+            # so reporting it empty would read as a broken pi install.
+            return True, f"pi {v} — endpoint mode ({self.base_url})"
         n = len(self.list_models())
         return True, (f"pi {v} — {n} model(s) in your catalogue"
                       if n else f"pi {v} — no models in your catalogue")
@@ -191,6 +195,10 @@ class PiHarness(Harness):
         if err:
             return False, err
         if not self.model:
+            if self.uses_endpoint:
+                # `harness models` cannot help here: the endpoint defines the id.
+                return False, (f"pi {v}: --endpoint needs --model "
+                               f"<id served by {self.base_url}>")
             return False, (f"pi {v}: no model selected — "
                            f"`bench harness models --harness pi`")
         if self.uses_endpoint:

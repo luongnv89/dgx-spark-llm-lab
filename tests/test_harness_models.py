@@ -99,6 +99,17 @@ class TestCatalogue(unittest.TestCase):
         self.assertEqual(models.spec("ollama", "m"), "ollama/m")
 
 
+def _offline_describe(h):
+    """describe() without the reachability probe it normally runs.
+
+    `available()` calls the endpoint, and a unit suite must not care what
+    happens to be serving on the machine running it — nor pay a DNS timeout for
+    a hostname invented by the test.
+    """
+    h.available = lambda: (True, "stubbed")
+    return h.describe()
+
+
 class TestHarnessDefaults(unittest.TestCase):
     """No harness may default to one machine's model or endpoint."""
 
@@ -126,7 +137,7 @@ class TestHarnessDefaults(unittest.TestCase):
         self.assertTrue(h.uses_endpoint)
         self.assertEqual(h.base_url, "http://localhost:8001/v1")
         self.assertEqual(h.provider, "benchkit")
-        self.assertEqual(h.describe()["source"], "endpoint")
+        self.assertEqual(_offline_describe(h)["source"], "endpoint")
 
     def test_every_harness_takes_the_same_endpoint_kwarg(self):
         """--endpoint is one contract, not three: cli.py passes it blindly."""
@@ -134,7 +145,7 @@ class TestHarnessDefaults(unittest.TestCase):
             with self.subTest(harness=name):
                 h = get(name, model="m", base_url="http://x/v1")
                 self.assertTrue(h.uses_endpoint)
-                self.assertEqual(h.describe()["source"], "endpoint")
+                self.assertEqual(_offline_describe(h)["source"], "endpoint")
 
     def test_opencode_injects_config_only_for_an_endpoint(self):
         h = get("opencode", provider="ollama", model="m")

@@ -48,7 +48,7 @@ accept it, and none of them writes to your own configuration to do it:
 |---|---|
 | `opencode` | a throwaway provider config next to the temp workspace, handed over as `OPENCODE_CONFIG` |
 | `claude-code` | `ANTHROPIC_BASE_URL` plus a throwaway `CLAUDE_CONFIG_DIR` |
-| `pi` | a throwaway catalogue in the run's temp dir holding one extra provider, handed over as `PI_CODING_AGENT_DIR` |
+| `pi` | a throwaway catalogue in the run's temp dir holding one synthetic provider and nothing else, handed over as `PI_CODING_AGENT_DIR` |
 
 In this mode the harness catalogue does not apply, so `--model` must name the id that
 endpoint serves — it is checked against the endpoint's `/models` before the run starts:
