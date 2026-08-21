@@ -33,6 +33,24 @@ def _print_result(r):
           + (f"   <{str(r.get('error'))[:70]}>" if not r["passed"] else ""), flush=True)
 
 
+def _execute_suite(suite, tasks, cfg, max_turns=None, keep_code=False):
+    """The single place that decides *how* a suite is executed.
+
+    Codegen suites are one-shot (`runner.run`, scored by hidden unit tests);
+    agentic suites are multi-turn tool-calling loops (`agentic.loop.run`,
+    scored by an oracle over the final workspace). Every command that executes
+    a suite -- `run`, `compare`, and anything added later -- must route through
+    here, so the two paths cannot silently diverge again (issue #55).
+
+    Returns the ``(summary, results)`` pair of whichever runner was chosen.
+    """
+    if kind(suite) == "agentic":
+        from benchkit.agentic import loop
+        extra = {} if max_turns is None else {"max_turns": max_turns}
+        return loop.run(tasks, cfg, on_result=_print_agentic, **extra)
+    return runner.run(tasks, cfg, on_result=_print_result, keep_code=keep_code)
+
+
 def cmd_suites(args):
     for name, tasks in SUITES.items():
         print(f"{name:<8} {len(tasks):>3} tasks   {DESCRIPTIONS[name]}")
@@ -75,12 +93,8 @@ def cmd_run(args):
     print(f"suite={args.suite} ({len(tasks)} tasks)  {cfg.label}\n"
           f"endpoint={cfg.base_url}  samples={cfg.samples}  concurrency={cfg.concurrency}\n",
           flush=True)
-    if kind(args.suite) == "agentic":
-        from benchkit.agentic import loop
-        summary, results = loop.run(tasks, cfg, on_result=_print_agentic,
-                                    max_turns=args.max_turns)
-    else:
-        summary, results = runner.run(tasks, cfg, on_result=_print_result,
+    summary, results = _execute_suite(args.suite, tasks, cfg,
+                                      max_turns=args.max_turns,
                                       keep_code=args.keep_code)
 
     out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
@@ -144,12 +158,19 @@ def cmd_compare(args):
                     samples=args.samples, concurrency=args.concurrency,
                     test_timeout=args.test_timeout)
                 print(f"\n--- {label} ---", flush=True)
-                summary, results = runner.run(get(args.suite), cfg, on_result=_print_result)
+                summary, results = _execute_suite(
+                    args.suite, get(args.suite), cfg, max_turns=args.max_turns)
                 p = os.path.join(outdir, f"{_slug(label)}.json")
                 with open(p, "w") as f:
                     json.dump(dict(summary=summary, results=results), f, indent=2)
                 paths.append(p)
-                print(f"  -> pass@1 {summary['pass_at_1'] * 100:.1f} %  ({p})", flush=True)
+                line = f"  -> pass@1 {summary['pass_at_1'] * 100:.1f} %"
+                if summary.get("kind") == "agentic":
+                    line += (f"  agent score {summary['agent_score'] * 100:.1f}"
+                             f"  {summary['mean_tool_calls']:.1f} calls vs par "
+                             f"{summary['mean_par_calls']:.1f}"
+                             f"  {summary['mean_turns']:.1f} turns")
+                print(f"{line}  ({p})", flush=True)
     finally:
         if original and args.restore:
             print(f"\nrestoring {original}")
@@ -350,6 +371,8 @@ def main(argv=None):
                    help="run each model twice, thinking off then on")
     s.add_argument("--max-tokens", type=int, default=6000)
     s.add_argument("--max-tokens-think", type=int, default=16000)
+    s.add_argument("--max-turns", type=int, default=25,
+                   help="agentic suite: tool-calling turns before the task is abandoned")
     s.add_argument("--no-restore", dest="restore", action="store_false",
                    help="leave the last model serving instead of restoring the original")
     s.set_defaults(func=cmd_compare)

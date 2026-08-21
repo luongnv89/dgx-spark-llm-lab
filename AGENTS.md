@@ -96,6 +96,10 @@ This rewrites `MODEL_ID`, restarts the service, waits for health, runs both mode
 model, restores the original, and writes the report. **It takes the endpoint down for
 minutes per swap — confirm with a human first if anyone else uses it.**
 
+`--suite` accepts the agentic suites too (`agentic`, `agentic-hard`, `agentic-all`);
+compare then runs the tool-calling loop and reports agent score, calls vs par and turns,
+with `--max-turns` bounding each task exactly as in `./bench run`.
+
 Otherwise point `BENCH_BASE_URL` at each endpoint in turn and use `./bench run`.
 
 ## Step 5 — decide, and write it down
