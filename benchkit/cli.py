@@ -245,7 +245,8 @@ def _sweep_harness(args, setup):
     # always pointed at it rather than at its own configured providers.
     endpoint = args.endpoint or args.base_url
     provider, model = _sweep_model(args, setup)
-    h = H.get(setup.harness, provider=provider, model=model, base_url=endpoint)
+    h = H.get(setup.harness,
+              H.HarnessConfig(provider=provider, model=model, base_url=endpoint))
     ok, detail = h.available()
     if not ok:
         raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
@@ -381,7 +382,7 @@ def _harness_pick(args, endpoint):
     """Which model to benchmark, resolved from the user's own harness config."""
     from benchkit import harness as H
     from benchkit.harness import models as hmodels
-    probe = H.get(args.harness, **_endpoint_kw(endpoint))
+    probe = H.get(args.harness, H.HarnessConfig(base_url=endpoint))
     entries = [] if endpoint else hmodels.catalogue(probe)
     spec = args.model or os.environ.get("BENCH_HARNESS_MODEL") or ""
     if spec:
@@ -427,8 +428,8 @@ def _harness_run(args, endpoint):
     from benchkit.harness import runner as hrunner
 
     provider, model = _harness_pick(args, endpoint)
-    h = H.get(args.harness, provider=provider, model=model,
-              **_endpoint_kw(endpoint))
+    h = H.get(args.harness,
+              H.HarnessConfig(provider=provider, model=model, base_url=endpoint))
     tasks = get(args.suite)
     if kind(args.suite) != "agentic":
         raise SystemExit("harness runs need an agentic suite "
@@ -452,18 +453,6 @@ def _harness_run(args, endpoint):
     _print_harness_summary(h, summary)
     print(f"\nwritten to {out}")
     return 0
-
-
-def _endpoint_kw(endpoint):
-    """An explicit endpoint is opt-in; all three harnesses accept one.
-
-    Every adapter points its tool at a throwaway config for the run rather than
-    editing the user's — opencode via OPENCODE_CONFIG, claude-code via
-    CLAUDE_CONFIG_DIR, pi via a staged catalogue behind PI_CODING_AGENT_DIR.
-    """
-    if not endpoint:
-        return {}
-    return {"base_url": endpoint}
 
 
 def cmd_configs(args):

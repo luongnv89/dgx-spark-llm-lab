@@ -34,6 +34,22 @@ class HarnessResult:
     raw_log: str = ""
 
 
+@dataclass(frozen=True)
+class HarnessConfig:
+    """How a run reaches its model: the fields every harness adapter shares.
+
+    One object instead of seven constructor kwargs, so each adapter's __init__
+    carries only what is genuinely its own — claude-code's tool pinning,
+    opencode's variant, pi's agent directory.
+    """
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    binary: str | None = None
+    api_key: str | None = None
+    extra_args: tuple[str, ...] = ()
+
+
 class Harness:
     """Run a prompt against a real directory and leave the result on disk."""
 

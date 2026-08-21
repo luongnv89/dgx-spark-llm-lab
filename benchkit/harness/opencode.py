@@ -34,7 +34,7 @@ import os
 import shutil
 import subprocess
 
-from .base import Harness, HarnessResult
+from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
 
 CONFIG_NAME = "opencode.json"
@@ -48,15 +48,15 @@ class OpenCodeHarness(Harness):
 
     _config_path = None
 
-    def __init__(self, provider=None, model=None, base_url=None,
-                 binary="opencode", variant=None, api_key=None, extra_args=()):
-        self.base_url = base_url or None
-        self.provider = provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
-        self.model = model
-        self.binary = binary
+    def __init__(self, cfg=None, *, variant=None):
+        c = cfg or HarnessConfig()
+        self.base_url = c.base_url or None
+        self.provider = c.provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
+        self.model = c.model
+        self.binary = c.binary or "opencode"
         self.variant = variant
-        self.api_key = api_key
-        self.extra_args = list(extra_args)
+        self.api_key = c.api_key
+        self.extra_args = list(c.extra_args)
 
     @property
     def uses_endpoint(self):

@@ -62,7 +62,7 @@ import shutil
 import subprocess
 import urllib.request
 
-from .base import Harness, HarnessResult
+from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
 
 THINKING_LEVELS = {False: "off", True: "high"}
@@ -87,17 +87,17 @@ ENDPOINT_MAX_TOKENS = 16384
 class PiHarness(Harness):
     name = "pi"
 
-    def __init__(self, provider=None, model=None, base_url=None,
-                 binary="pi", agent_dir=None, api_key=None, extra_args=()):
-        self.base_url = base_url or None
-        self.provider = provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
-        self.model = model
-        self.binary = binary
+    def __init__(self, cfg=None, *, agent_dir=None):
+        c = cfg or HarnessConfig()
+        self.base_url = c.base_url or None
+        self.provider = c.provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
+        self.model = c.model
+        self.binary = c.binary or "pi"
         #: the user's own agent directory. Read for a normal run, and in
         #: endpoint mode not even that — it is never opened for writing.
         self.agent_dir = agent_dir or os.environ.get("PI_CODING_AGENT_DIR")
-        self.api_key = api_key
-        self.extra_args = list(extra_args)
+        self.api_key = c.api_key
+        self.extra_args = list(c.extra_args)
 
     @property
     def uses_endpoint(self):
@@ -359,8 +359,8 @@ class PiHarness(Harness):
         res = parse_events(p.stdout)
         if p.returncode != 0 and not res.error:
             res.stop_reason = "error"
-            res.error = (p.stderr or "").strip().splitlines()[-1:] and \
-                (p.stderr or "").strip().splitlines()[-1][:200] or f"exit {p.returncode}"
+            tail = (p.stderr or "").strip().splitlines()
+            res.error = tail[-1][:200] if tail else f"exit {p.returncode}"
         return res
 
 

@@ -65,7 +65,7 @@ import shutil
 import subprocess
 import urllib.request
 
-from .base import Harness, HarnessResult
+from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
 
 #: Built-in tools the model is allowed. Deliberately excludes Task/Workflow
@@ -92,21 +92,20 @@ class ClaudeCodeHarness(Harness):
 
     _config_home = None
 
-    def __init__(self, provider=None, model=None,
-                 base_url=None, binary="claude", api_key="sk-local",
-                 tools=DEFAULT_TOOLS, effort=None, extra_args=()):
+    def __init__(self, cfg=None, *, tools=DEFAULT_TOOLS, effort=None):
         # `provider` exists only so the shared CLI flag is accepted; Claude Code
         # has no provider concept for a custom base URL.
-        self.provider = provider
-        self.model = model
+        c = cfg or HarnessConfig()
+        self.provider = c.provider
+        self.model = c.model
         # No endpoint means "use the install as the user has it": their auth,
         # their default base URL. Only an explicit one is injected.
-        self.base_url = _api_root(base_url) if base_url else None
-        self.binary = binary
-        self.api_key = api_key
+        self.base_url = _api_root(c.base_url) if c.base_url else None
+        self.binary = c.binary or "claude"
+        self.api_key = c.api_key or "sk-local"
         self.tools = list(tools)
         self.effort = effort
-        self.extra_args = list(extra_args)
+        self.extra_args = list(c.extra_args)
 
     # --- discovery ------------------------------------------------------
     def _version(self):
