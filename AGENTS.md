@@ -200,6 +200,12 @@ row is a guess, not a known-good config.
 - **Never delete or overwrite an existing `results/` directory.** They are append-only; a
   superseded campaign stays next to the one that replaced it.
 - **Never restart a shared serving endpoint without explicit human approval.** `bench sweep` enforces this: it refuses to start unless a human approved the restarts interactively or passed `--yes-restart-endpoint`.
+- **`./bench run` executes arbitrary model output on the host.** The benchmark extracts
+  code from model responses and runs it via `subprocess` with full filesystem, network
+  and credential access. Set `BENCH_ISOLATE=1` to run generated code in a new network
+  and mount namespace (requires `unshare`). This is a best-effort sandbox, not a VM —
+  a sufficiently sophisticated payload can still escape. Never benchmark untrusted models
+  on a machine you cannot afford to compromise.
 - **Do not report a number you did not measure.** No estimating, no carrying a figure over
   from another machine, no quoting the model card.
 - **Report failures that were the harness's fault as such.** One `run_python` bug in this

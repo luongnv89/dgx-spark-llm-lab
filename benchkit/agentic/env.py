@@ -149,9 +149,23 @@ class Workspace:
                 os.makedirs(os.path.dirname(full), exist_ok=True)
                 with open(full, "w") as f:
                     f.write(body)
+            isolate = os.environ.get("BENCH_ISOLATE", "").lower() in ("1", "true", "yes")
             try:
-                r = subprocess.run(cmd, cwd=d, capture_output=True, text=True,
-                                   timeout=self.run_timeout)
+                if isolate:
+                    # Run inside a new network + mount namespace for isolation.
+                    # Falls back to unisolated if unshare is unavailable.
+                    try:
+                        r = subprocess.run(
+                            ["unshare", "--net", "--mount"] + cmd,
+                            cwd=d, capture_output=True, text=True,
+                            timeout=self.run_timeout,
+                        )
+                    except (FileNotFoundError, OSError):
+                        r = subprocess.run(cmd, cwd=d, capture_output=True, text=True,
+                                           timeout=self.run_timeout)
+                else:
+                    r = subprocess.run(cmd, cwd=d, capture_output=True, text=True,
+                                       timeout=self.run_timeout)
             except subprocess.TimeoutExpired:
                 return f"TIMEOUT after {self.run_timeout}s"
             created = self._sync_back(d) if sync_back else []

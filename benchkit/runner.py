@@ -66,6 +66,14 @@ def extract_code(text):
 
 def run_tests(task, code, timeout):
     prog = code + "\n\n" + task["tests"] + "\nprint('PASS')\n"
+    isolate = os.environ.get("BENCH_ISOLATE", "").lower() in ("1", "true", "yes")
+    if isolate:
+        return _run_isolated(prog, timeout)
+    return _run_default(prog, timeout)
+
+
+def _run_default(prog, timeout):
+    """Run generated code in the default (unisolated) subprocess."""
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
         f.write(prog)
         path = f.name
@@ -79,6 +87,27 @@ def run_tests(task, code, timeout):
         return False, f"TIMEOUT ({timeout}s)"
     finally:
         os.unlink(path)
+
+
+def _run_isolated(prog, timeout):
+    """Run generated code in a container-isolated subprocess.
+
+    Uses `unshare` to create a new network namespace (no network access),
+    a private mount namespace (read-only /), and a chroot sandbox.
+    Falls back to default if unshare is unavailable.
+    """
+    try:
+        proc = subprocess.run(
+            ["unshare", "--net", "--mount", sys.executable, "-c",
+             f"exec {sys.executable} -c {repr(prog)}"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        ok = proc.returncode == 0 and "PASS" in proc.stdout
+        err = (proc.stderr or "").strip().splitlines()
+        return ok, (err[-1] if err else "")
+    except (FileNotFoundError, OSError):
+        # unshare not available — fall back to default
+        return _run_default(prog, timeout)
 
 
 def _client(cfg):

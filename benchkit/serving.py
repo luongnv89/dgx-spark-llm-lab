@@ -3,9 +3,12 @@
 Only useful on the DGX Spark box described in SERVING.md. Everything else in
 benchkit works against any OpenAI-compatible endpoint and never imports this.
 """
+import datetime
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 import urllib.request
 
@@ -16,6 +19,33 @@ UNIT = "vllm-qwen"
 HEALTH_URL = "http://127.0.0.1:8801/v1/models"
 MODEL_RE = re.compile(r'^MODEL_ID="([^"]+)"', re.M)
 UNIT_RE = re.compile(r'^NAME="([^"$]+)"', re.M)
+
+
+def _atomic_write(path: str, content: str) -> None:
+    """Write *content* to *path* atomically via os.replace().
+
+    Writes to a sibling temp file first, then replaces the target. A
+    timestamped backup of the previous launcher is kept so the operation
+    is reversible.
+    """
+    backup_dir = os.path.join(os.path.dirname(path), "..", ".launcher-backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    # Keep a timestamped backup of the current file (if it exists)
+    if os.path.exists(path):
+        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_name = f"start-qwen.{ts}.bak"
+        backup_path = os.path.join(backup_dir, backup_name)
+        shutil.copy2(path, backup_path)
+    # Atomic write via temp file + os.replace
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".start-qwen-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.chmod(tmp_path, 0o755)
+        os.replace(tmp_path, path)
+    except Exception:
+        os.unlink(tmp_path)
+        raise
 
 
 def current_model(launcher=LAUNCHER):
@@ -31,7 +61,8 @@ def set_model(model_id, launcher=LAUNCHER):
         raise RuntimeError(f"no MODEL_ID= line in {launcher}")
     prev = m.group(1)
     if prev != model_id:
-        open(launcher, "w").write(MODEL_RE.sub(f'MODEL_ID="{model_id}"', src, count=1))
+        new_src = MODEL_RE.sub(f'MODEL_ID="{model_id}"', src, count=1)
+        _atomic_write(launcher, new_src)
     return prev
 
 
@@ -72,8 +103,7 @@ def apply_config(name, configs=CONFIGS, launcher=LAUNCHER):
     if not os.path.exists(path):
         raise SystemExit(f"no such config: {name}. Try `bench configs`.")
     src = open(path).read()
-    open(launcher, "w").write(src)
-    os.chmod(launcher, 0o755)
+    _atomic_write(launcher, src)
     m = MODEL_RE.search(src)
     return path, (m.group(1) if m else None)
 
