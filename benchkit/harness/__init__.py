@@ -2,10 +2,11 @@
 
 See benchkit/harness/base.py for why this exists and ROADMAP.md for what is next.
 """
-__all__ = ["Harness", "HarnessResult", "run_task", "PiHarness", "OpenCodeHarness",
-           "ClaudeCodeHarness", "HARNESSES", "get"]
+__all__ = ["Harness", "HarnessConfig", "HarnessResult", "run_task", "PiHarness",
+           "OpenCodeHarness", "ClaudeCodeHarness", "HARNESSES", "get"]
 
-from .base import Harness as Harness, HarnessResult as HarnessResult, run_task as run_task
+from .base import (Harness as Harness, HarnessConfig as HarnessConfig,
+                   HarnessResult as HarnessResult, run_task as run_task)
 from .pi import PiHarness
 from .opencode import OpenCodeHarness
 from .claudecode import ClaudeCodeHarness
@@ -14,7 +15,7 @@ HARNESSES = {"pi": PiHarness, "opencode": OpenCodeHarness,
               "claude-code": ClaudeCodeHarness}
 
 
-def get(name, **kw):
+def get(name, cfg=None, **kw):
     if name not in HARNESSES:
         raise SystemExit(f"unknown harness {name!r}; have: {', '.join(HARNESSES)}")
-    return HARNESSES[name](**kw)
+    return HARNESSES[name](cfg, **kw)

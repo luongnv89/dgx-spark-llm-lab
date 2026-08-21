@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import HARNESSES, get, models  # noqa: E402
+from benchkit.harness import HARNESSES, HarnessConfig, get, models  # noqa: E402
 
 CATALOGUE = [
     ("anthropic", "claude-sonnet-4-5"),
@@ -133,7 +133,7 @@ class TestHarnessDefaults(unittest.TestCase):
 
     def test_pi_accepts_an_endpoint(self):
         """pi used to refuse one outright; it now stages a catalogue instead."""
-        h = get("pi", model="m", base_url="http://localhost:8001/v1")
+        h = get("pi", HarnessConfig(model="m", base_url="http://localhost:8001/v1"))
         self.assertTrue(h.uses_endpoint)
         self.assertEqual(h.base_url, "http://localhost:8001/v1")
         self.assertEqual(h.provider, "benchkit")
@@ -143,15 +143,15 @@ class TestHarnessDefaults(unittest.TestCase):
         """--endpoint is one contract, not three: cli.py passes it blindly."""
         for name in HARNESSES:
             with self.subTest(harness=name):
-                h = get(name, model="m", base_url="http://x/v1")
+                h = get(name, HarnessConfig(model="m", base_url="http://x/v1"))
                 self.assertTrue(h.uses_endpoint)
                 self.assertEqual(_offline_describe(h)["source"], "endpoint")
 
     def test_opencode_injects_config_only_for_an_endpoint(self):
-        h = get("opencode", provider="ollama", model="m")
+        h = get("opencode", HarnessConfig(provider="ollama", model="m"))
         self.assertNotIn("provider", str(h.describe().get("base_url") or ""))
         self.assertEqual(h.model_spec, "ollama/m")
-        e = get("opencode", model="m", base_url="http://x/v1")
+        e = get("opencode", HarnessConfig(model="m", base_url="http://x/v1"))
         self.assertEqual(e.provider, "benchkit")
         self.assertIn("http://x/v1", e._config()["provider"]["benchkit"]
                       ["options"]["baseURL"])

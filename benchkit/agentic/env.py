@@ -15,6 +15,20 @@ import tempfile
 MAX_OUTPUT = 4000
 
 
+def materialise(files, root):
+    """Write *files* into *root*, validating every path to prevent traversal.
+
+    This is the single point of defence against `F-BUG-001` — every caller
+    validates once, then reuses the same safe directory.
+    """
+    for p, body in files.items():
+        _safe_path(p)
+        full = os.path.join(root, p)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(body)
+
+
 def _no_tool_calls(solved: bool, tool_calls: int) -> tuple[bool, str | None]:
     """Refuse to score a run as solved when the model made zero tool calls.
 
@@ -141,14 +155,7 @@ class Workspace:
     def _materialise_and_run(self, cmd, sync_back=False):
         d = tempfile.mkdtemp(prefix="benchkit-agentic-")
         try:
-            for p, body in self.files.items():
-                # Re-validate each key before joining — a bad key cannot
-                # reach the filesystem by another route.
-                _safe_path(p)
-                full = os.path.join(d, p)
-                os.makedirs(os.path.dirname(full), exist_ok=True)
-                with open(full, "w") as f:
-                    f.write(body)
+            materialise(self.files, d)
             isolate = os.environ.get("BENCH_ISOLATE", "").lower() in ("1", "true", "yes")
             try:
                 if isolate:
@@ -213,12 +220,7 @@ class Workspace:
         """
         d = tempfile.mkdtemp(prefix="benchkit-check-")
         try:
-            for p, body in dict(self.files, **(extra_files or {})).items():
-                _safe_path(p)
-                full = os.path.join(d, p)
-                os.makedirs(os.path.dirname(full), exist_ok=True)
-                with open(full, "w") as f:
-                    f.write(body)
+            materialise(dict(self.files, **(extra_files or {})), d)
             try:
                 r = subprocess.run([sys.executable, path], cwd=d, capture_output=True,
                                    text=True, timeout=self.run_timeout)

@@ -8,8 +8,8 @@ by flailing through twenty calls is not the same as one that solves it in four.
 import concurrent.futures as cf
 import json
 import time
-from dataclasses import asdict
 
+from ..runner import _summarize_common
 from .env import Workspace, _no_tool_calls, call
 from .tools import TOOLS, SYSTEM
 
@@ -48,6 +48,69 @@ def _args_of(tc):
     return args, False
 
 
+def _chat(client, cfg, messages):
+    """One chat completion with the suite's tools attached."""
+    kw = {}
+    if cfg.temperature is not None:
+        kw["temperature"] = cfg.temperature
+    return client.chat.completions.create(
+        model=cfg.model, messages=messages, tools=TOOLS, tool_choice="auto",
+        max_tokens=cfg.max_tokens,
+        extra_body={"chat_template_kwargs": {"enable_thinking": cfg.thinking,
+                                             "preserve_thinking": cfg.thinking}},
+        **kw)
+
+
+def _assistant_message(msg, calls):
+    return {"role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [{"id": c.id, "type": "function",
+                            "function": {"name": c.function.name,
+                                         "arguments": c.function.arguments}}
+                           for c in calls] or None}
+
+
+def _execute_calls(ws, messages, calls):
+    """Run one turn's tool calls against the workspace.
+
+    Returns (malformed, unknown) -- the hygiene counts this turn added.
+    """
+    malformed = unknown = 0
+    for tc in calls:
+        name = tc.function.name
+        args, bad = _args_of(tc)
+        if bad:
+            malformed += 1
+            out = ("error: arguments were not a JSON object. Send valid JSON "
+                   "matching the tool's schema.")
+            ws.record(name, {"_raw": str(tc.function.arguments)[:200]}, False, out)
+        else:
+            ok, out = call(ws, name, args)
+            if not ok and out.startswith("no such tool"):
+                unknown += 1
+        messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
+    return malformed, unknown
+
+
+def _score(ws, task):
+    """Check the final workspace, then apply the no-tool-calls guard.
+
+    Returns (solved, detail, total_calls).
+    """
+    try:
+        solved, detail = task["check"](ws)
+    except Exception as e:  # noqa: BLE001 — a broken predicate is a test bug, report it
+        solved, detail = False, f"check raised {e!r}"
+
+    total_calls = len(ws.calls)
+    # A model that replies in prose with no tool calls has not done any work.
+    solved, new_detail = _no_tool_calls(solved, total_calls)
+    if new_detail:
+        solved = False
+        detail = new_detail
+    return solved, detail, total_calls
+
+
 def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
     t0 = time.perf_counter()
     ws = Workspace(task["files"])
@@ -60,43 +123,18 @@ def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
 
     try:
         for turns in range(1, max_turns + 1):
-            kw = {}
-            if cfg.temperature is not None:
-                kw["temperature"] = cfg.temperature
-            resp = client.chat.completions.create(
-                model=cfg.model, messages=messages, tools=TOOLS, tool_choice="auto",
-                max_tokens=cfg.max_tokens,
-                extra_body={"chat_template_kwargs": {"enable_thinking": cfg.thinking,
-                                                     "preserve_thinking": cfg.thinking}},
-                **kw)
+            resp = _chat(client, cfg, messages)
             if resp.usage:
                 completion_tokens += resp.usage.completion_tokens or 0
             msg = resp.choices[0].message
             calls = msg.tool_calls or []
-            messages.append({
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [{"id": c.id, "type": "function",
-                                "function": {"name": c.function.name,
-                                             "arguments": c.function.arguments}}
-                               for c in calls] or None,
-            })
+            messages.append(_assistant_message(msg, calls))
             if not calls:
                 stop_reason = "no_tool_call"
                 break
-            for tc in calls:
-                name = tc.function.name
-                args, bad = _args_of(tc)
-                if bad:
-                    malformed += 1
-                    out = ("error: arguments were not a JSON object. Send valid JSON "
-                           "matching the tool's schema.")
-                    ws.record(name, {"_raw": str(tc.function.arguments)[:200]}, False, out)
-                else:
-                    ok, out = call(ws, name, args)
-                    if not ok and out.startswith("no such tool"):
-                        unknown += 1
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
+            m, u = _execute_calls(ws, messages, calls)
+            malformed += m
+            unknown += u
             if ws.finished is not None:
                 stop_reason = "finished"
                 break
@@ -105,17 +143,7 @@ def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
         error = f"{type(e).__name__}: {e}"
 
     elapsed = time.perf_counter() - t0
-    try:
-        solved, detail = task["check"](ws)
-    except Exception as e:  # noqa: BLE001 — a broken predicate is a test bug, report it
-        solved, detail = False, f"check raised {e!r}"
-
-    total_calls = len(ws.calls)
-    # A model that replies in prose with no tool calls has not done any work.
-    solved, new_detail = _no_tool_calls(solved, total_calls)
-    if new_detail:
-        solved = False
-        detail = new_detail
+    solved, detail, total_calls = _score(ws, task)
 
     par = par_calls(task)
     # Efficiency only means something for a solved task: failing in three calls is
@@ -155,17 +183,11 @@ def run(tasks, cfg, on_result=None, max_turns=MAX_TURNS):
 
 
 def summarize(results, cfg, wall, n_tasks):
-    by_task = {}
-    for r in results:
-        by_task.setdefault(r["task"], []).append(r)
+    common = _summarize_common(results, cfg, wall, n_tasks)
 
     def mean(key):
         vals = [r[key] for r in results if r.get(key) is not None]
         return sum(vals) / len(vals) if vals else None
-
-    def rate(pred):
-        sel = [r for r in results if pred(r)]
-        return (sum(1 for r in sel if r["passed"]) / len(sel)) if sel else None
 
     total_calls = sum(r["tool_calls"] for r in results)
     total_failed = sum(r["failed_calls"] for r in results)
@@ -175,38 +197,39 @@ def summarize(results, cfg, wall, n_tasks):
     # Solving is the price of entry; efficiency breaks the ties that solve rate
     # cannot. A model that solves everything in twice par scores 0.5, not 1.0.
     agent_score = solve * (mean_eff if mean_eff is not None else 0.0)
-    return dict(
-        kind="agentic", config=asdict(cfg), tasks=n_tasks, generations=len(results),
-        pass_at_1=solve,
-        agent_score=agent_score,
-        mean_efficiency=mean_eff,
-        mean_par_calls=(sum(r["par_calls"] for r in results if r.get("par_calls"))
-                        / max(1, sum(1 for r in results if r.get("par_calls")))),
-        pass_all_samples=sum(1 for v in by_task.values()
-                             if all(r["passed"] for r in v)) / max(1, len(by_task)),
-        pass_any_sample=sum(1 for v in by_task.values()
-                            if any(r["passed"] for r in v)) / max(1, len(by_task)),
-        wall_seconds=wall,
-        mean_completion_tokens=mean("completion_tokens"),
-        median_completion_tokens=(sorted(r["completion_tokens"] for r in results)[len(results) // 2]
-                                  if results else None),
-        mean_tok_s=mean("tok_s"), mean_ttft=None,
-        aggregate_tok_s=(sum(r["completion_tokens"] for r in results) / wall) if wall else None,
-        truncated=0,
-        errored=sum(1 for r in results if r["stop_reason"] == "error"),
-        # --- agentic-specific ---
-        mean_turns=mean("turns"),
-        mean_tool_calls=mean("tool_calls"),
-        total_tool_calls=total_calls,
-        valid_call_rate=((total_calls - total_failed) / total_calls) if total_calls else None,
-        malformed_args=sum(r["malformed_args"] for r in results),
-        unknown_tools=sum(r["unknown_tools"] for r in results),
-        hit_turn_limit=sum(1 for r in results if r["stop_reason"] == "max_turns"),
-        stalled_no_tool_call=sum(1 for r in results if r["stop_reason"] == "no_tool_call"),
-        by_task={k: sum(1 for r in v if r["passed"]) / len(v) for k, v in sorted(by_task.items())},
-        by_difficulty={d: rate(lambda r, d=d: r["difficulty"] == d)
-                       for d in ("easy", "medium", "hard")},
-    )
+
+    common["kind"] = "agentic"
+    common["pass_at_1"] = solve
+    common["agent_score"] = agent_score
+    common["mean_efficiency"] = mean_eff
+    common["mean_par_calls"] = (
+        sum(r["par_calls"] for r in results if r.get("par_calls"))
+        / max(1, sum(1 for r in results if r.get("par_calls"))))
+    # Token stats keep the agentic semantics: every row counts, including the
+    # zero-token rows a backend that reports no usage produces. _summarize_common
+    # drops falsy values for the one-shot runner; that would inflate these.
+    common["mean_completion_tokens"] = mean("completion_tokens")
+    common["median_completion_tokens"] = (
+        sorted(r["completion_tokens"] for r in results)[len(results) // 2]
+        if results else None)
+    common["mean_tok_s"] = mean("tok_s")
+    common["mean_ttft"] = None  # the harness loop never measures TTFT
+    common["aggregate_tok_s"] = (sum(r["completion_tokens"] for r in results) / wall) \
+        if wall else None
+    common["truncated"] = 0
+    common["errored"] = sum(1 for r in results if r["stop_reason"] == "error")
+    # --- agentic-specific ---
+    common["mean_turns"] = mean("turns")
+    common["mean_tool_calls"] = mean("tool_calls")
+    common["total_tool_calls"] = total_calls
+    common["valid_call_rate"] = ((total_calls - total_failed) / total_calls) \
+        if total_calls else None
+    common["malformed_args"] = sum(r["malformed_args"] for r in results)
+    common["unknown_tools"] = sum(r["unknown_tools"] for r in results)
+    common["hit_turn_limit"] = sum(1 for r in results if r["stop_reason"] == "max_turns")
+    common["stalled_no_tool_call"] = sum(1 for r in results
+                                        if r["stop_reason"] == "no_tool_call")
+    return common
 
 
 def validate(tasks):

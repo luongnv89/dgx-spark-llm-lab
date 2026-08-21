@@ -130,9 +130,9 @@ def cmd_run(args):
         print(f"agent score            {summary['agent_score'] * 100:.1f}   "
               f"(solve {summary['pass_at_1'] * 100:.1f} % x efficiency "
               f"{(summary['mean_efficiency'] or 0) * 100:.1f} %)")
-        print(f"mean calls vs par      {summary['mean_tool_calls']:.1f} vs "
-              f"{summary['mean_par_calls']:.1f}")
-        print(f"mean turns / calls     {summary['mean_turns']:.1f} / {summary['mean_tool_calls']:.1f}")
+        print(f"mean calls vs par      {summary['mean_tool_calls'] or 0:.1f} vs "
+              f"{summary['mean_par_calls'] or 0:.1f}")
+        print(f"mean turns / calls     {summary['mean_turns'] or 0:.1f} / {summary['mean_tool_calls'] or 0:.1f}")
         print(f"valid tool-call rate   {(summary['valid_call_rate'] or 0) * 100:.1f} %")
         print(f"malformed / unknown    {summary['malformed_args']} / {summary['unknown_tools']}")
         print(f"turn-limit / stalled   {summary['hit_turn_limit']} / {summary['stalled_no_tool_call']}")
@@ -196,8 +196,11 @@ def cmd_compare(args):
                 print(f"{line}  ({p})", flush=True)
     finally:
         if original and args.restore:
-            print(f"\nrestoring {original}")
-            serving.swap_to(original)
+            try:
+                print(f"\nrestoring {original}")
+                serving.swap_to(original)
+            except Exception as e:  # noqa: BLE001 — log the failure, never mask the original
+                print(f"WARNING: could not restore {original}: {e}", file=sys.stderr)
 
     md = report.build([report.load(p) for p in paths], title=args.title,
                       question=args.question)
@@ -242,7 +245,8 @@ def _sweep_harness(args, setup):
     # always pointed at it rather than at its own configured providers.
     endpoint = args.endpoint or args.base_url
     provider, model = _sweep_model(args, setup)
-    h = H.get(setup.harness, provider=provider, model=model, base_url=endpoint)
+    h = H.get(setup.harness,
+              H.HarnessConfig(provider=provider, model=model, base_url=endpoint))
     ok, detail = h.available()
     if not ok:
         raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
@@ -345,50 +349,52 @@ def cmd_harness(args):
     and credentials, so anyone can run this benchmark against the models they
     already use, without editing their editor's config.
     """
+    if args.harness_cmd == "list":
+        _harness_list()
+        return 0
+    if args.harness_cmd == "models":
+        _harness_models(args)
+        return 0
+    endpoint = args.endpoint or os.environ.get("BENCH_HARNESS_ENDPOINT") or None
+    return _harness_run(args, endpoint)
+
+
+def _harness_list():
+    from benchkit import harness as H
+    for name in H.HARNESSES:
+        ok, detail = H.get(name).probe()
+        print(f"{name:<12} {'ok     ' if ok else 'MISSING'} {detail}")
+
+
+def _harness_models(args):
     from benchkit import harness as H
     from benchkit.harness import models as hmodels
-    from benchkit.harness import runner as hrunner
+    names = [args.harness] if args.harness_explicit else list(H.HARNESSES)
+    for name in names:
+        probe = H.get(name)
+        ok, detail = probe.probe()
+        print(f"\n{name}: {detail}")
+        for provider, model in hmodels.catalogue(probe):
+            print(f"  {hmodels.spec(provider, model)}")
 
-    if args.harness_cmd == "list":
-        for name in H.HARNESSES:
-            ok, detail = H.get(name).probe()
-            print(f"{name:<12} {'ok     ' if ok else 'MISSING'} {detail}")
-        return 0
 
-    endpoint = args.endpoint or os.environ.get("BENCH_HARNESS_ENDPOINT") or None
-
-    if args.harness_cmd == "models":
-        names = [args.harness] if args.harness_explicit else list(H.HARNESSES)
-        for name in names:
-            probe = H.get(name)
-            ok, detail = probe.probe()
-            print(f"\n{name}: {detail}")
-            for provider, model in hmodels.catalogue(probe):
-                print(f"  {hmodels.spec(provider, model)}")
-        return 0
-
-    # --- which model, from the user's own setup --------------------------
-    probe = H.get(args.harness, **_endpoint_kw(endpoint))
+def _harness_pick(args, endpoint):
+    """Which model to benchmark, resolved from the user's own harness config."""
+    from benchkit import harness as H
+    from benchkit.harness import models as hmodels
+    probe = H.get(args.harness, H.HarnessConfig(base_url=endpoint))
     entries = [] if endpoint else hmodels.catalogue(probe)
     spec = args.model or os.environ.get("BENCH_HARNESS_MODEL") or ""
     if spec:
-        provider, model = hmodels.resolve(spec, entries, provider=args.provider)
-    elif endpoint:
+        return hmodels.resolve(spec, entries, provider=args.provider)
+    if endpoint:
         raise SystemExit("--endpoint needs --model <id served by that endpoint>")
-    else:
-        provider, model = hmodels.pick(args.harness, entries)
+    return hmodels.pick(args.harness, entries)
 
-    h = H.get(args.harness, provider=provider, model=model,
-              **_endpoint_kw(endpoint))
-    tasks = get(args.suite)
-    if kind(args.suite) != "agentic":
-        raise SystemExit("harness runs need an agentic suite "
-                         "(agentic, agentic-hard, agentic-all)")
-    ok, detail = h.available()
-    if not ok:
-        raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
 
-    cfg = runner.Config(base_url=endpoint or "(harness)", model=h.model_spec,
+def _harness_config(args, h, base_url):
+    """The Config one harness run records, label included."""
+    cfg = runner.Config(base_url=base_url, model=h.model_spec,
                         label=args.label, thinking=args.thinking, max_tokens=0,
                         samples=args.samples, concurrency=args.concurrency,
                         test_timeout=args.test_timeout)
@@ -398,17 +404,10 @@ def cmd_harness(args):
         # harness alone would overwrite one with the other.
         cfg.label = (f"{h.name} {_slug(str(h.model_spec))} "
                      f"think-{'ON' if args.thinking else 'OFF'}")
-    print(f"harness={h.name}  {detail}\nsuite={args.suite} ({len(tasks)} tasks)  "
-          f"{cfg.label}  samples={cfg.samples} concurrency={cfg.concurrency}\n", flush=True)
+    return cfg
 
-    summary, results = hrunner.run(h, tasks, cfg, on_result=_print_agentic,
-                                   timeout=args.timeout, keep_dirs=args.keep_dirs)
-    out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
-    out = _ensure_unique_path(out)
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    with open(out, "w") as f:
-        json.dump(dict(summary=summary, results=results), f, indent=2)
 
+def _print_harness_summary(h, summary):
     print("\n" + "=" * 64)
     print(f"harness / model        {h.name} / {h.model_spec}")
     print(f"agent score            {summary['agent_score'] * 100:.1f}   "
@@ -422,20 +421,38 @@ def cmd_harness(args):
     print(f"valid tool-call rate   {(summary['valid_call_rate'] or 0) * 100:.1f} %")
     print(f"wall                   {summary['wall_seconds']:.0f} s")
     print("=" * 64)
+
+
+def _harness_run(args, endpoint):
+    from benchkit import harness as H
+    from benchkit.harness import runner as hrunner
+
+    provider, model = _harness_pick(args, endpoint)
+    h = H.get(args.harness,
+              H.HarnessConfig(provider=provider, model=model, base_url=endpoint))
+    tasks = get(args.suite)
+    if kind(args.suite) != "agentic":
+        raise SystemExit("harness runs need an agentic suite "
+                         "(agentic, agentic-hard, agentic-all)")
+    ok, detail = h.available()
+    if not ok:
+        raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
+
+    cfg = _harness_config(args, h, endpoint or "(harness)")
+    print(f"harness={h.name}  {detail}\nsuite={args.suite} ({len(tasks)} tasks)  "
+          f"{cfg.label}  samples={cfg.samples} concurrency={cfg.concurrency}\n", flush=True)
+
+    summary, results = hrunner.run(h, tasks, cfg, on_result=_print_agentic,
+                                   timeout=args.timeout, keep_dirs=args.keep_dirs)
+    out = args.out or os.path.join(RESULTS, _stamp(), f"{_slug(cfg.label)}.json")
+    out = _ensure_unique_path(out)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w") as f:
+        json.dump(dict(summary=summary, results=results), f, indent=2)
+
+    _print_harness_summary(h, summary)
     print(f"\nwritten to {out}")
     return 0
-
-
-def _endpoint_kw(endpoint):
-    """An explicit endpoint is opt-in; all three harnesses accept one.
-
-    Every adapter points its tool at a throwaway config for the run rather than
-    editing the user's — opencode via OPENCODE_CONFIG, claude-code via
-    CLAUDE_CONFIG_DIR, pi via a staged catalogue behind PI_CODING_AGENT_DIR.
-    """
-    if not endpoint:
-        return {}
-    return {"base_url": endpoint}
 
 
 def cmd_configs(args):
@@ -501,31 +518,33 @@ def _ensure_unique_path(path: str) -> str:
         i += 1
 
 
-def main(argv=None):
-    p = argparse.ArgumentParser(prog="bench", description=__doc__)
-    sub = p.add_subparsers(dest="cmd", required=True)
+def _common_args(sp):
+    sp.add_argument("--suite", default="all", choices=list(SUITES))
+    sp.add_argument("--base-url", default=os.environ.get("BENCH_BASE_URL",
+                                                         "http://localhost:8001/v1"))
+    sp.add_argument("--model", default=os.environ.get("BENCH_MODEL", "montimage-dgx-spark"),
+                    help="model name to send in the request (the served alias)")
+    sp.add_argument("--samples", type=int, default=2)
+    sp.add_argument("--concurrency", type=int, default=4)
+    sp.add_argument("--test-timeout", type=int, default=60)
 
-    def common(sp):
-        sp.add_argument("--suite", default="all", choices=list(SUITES))
-        sp.add_argument("--base-url", default=os.environ.get("BENCH_BASE_URL",
-                                                             "http://localhost:8001/v1"))
-        sp.add_argument("--model", default=os.environ.get("BENCH_MODEL", "montimage-dgx-spark"),
-                        help="model name to send in the request (the served alias)")
-        sp.add_argument("--samples", type=int, default=2)
-        sp.add_argument("--concurrency", type=int, default=4)
-        sp.add_argument("--test-timeout", type=int, default=60)
 
+def _parser_suites(sub):
     s = sub.add_parser("suites", help="list the available suites")
     s.add_argument("-v", "--verbose", action="store_true")
     s.set_defaults(func=cmd_suites)
 
+
+def _parser_validate(sub):
     s = sub.add_parser("validate", help="prove the hidden tests are passable")
     s.add_argument("--suite", default="all", choices=list(SUITES))
     s.add_argument("--test-timeout", type=int, default=120)
     s.set_defaults(func=cmd_validate)
 
+
+def _parser_run(sub):
     s = sub.add_parser("run", help="run a suite against an endpoint")
-    common(s)
+    _common_args(s)
     s.add_argument("--thinking", action="store_true", help="enable the model's reasoning block")
     s.add_argument("--max-tokens", type=int, default=6000)
     s.add_argument("--label", default="", help="human name for this run, used in the report")
@@ -535,6 +554,8 @@ def main(argv=None):
                    help="agentic suite: tool-calling turns before the task is abandoned")
     s.set_defaults(func=cmd_run)
 
+
+def _parser_report(sub):
     s = sub.add_parser("report", help="build a Markdown report from result files")
     s.add_argument("results", nargs="+")
     s.add_argument("--title", default="Benchmark report")
@@ -549,8 +570,10 @@ def main(argv=None):
     s.add_argument("--out")
     s.set_defaults(func=cmd_report)
 
+
+def _parser_compare(sub):
     s = sub.add_parser("compare", help="swap the local vLLM between models and report (DGX box only)")
-    common(s)
+    _common_args(s)
     s.add_argument("models", nargs="+", help="Hugging Face model ids to serve in turn")
     s.add_argument("--title", default="Model comparison")
     s.add_argument("--question")
@@ -567,10 +590,12 @@ def main(argv=None):
                    help="skip the restart confirmation prompt")
     s.set_defaults(func=cmd_compare)
 
+
+def _parser_sweep(sub):
     s = sub.add_parser("sweep",
                        help="sweep an explicit setup matrix (config x harness x "
                             "thinking) and rank the setups")
-    common(s)
+    _common_args(s)
     s.add_argument("--setup", dest="setups", action="append", default=[],
                    metavar="config=...,harness=...,model=...,thinking=...",
                    help="one setup, repeatable. Keys: config (a `bench configs` "
@@ -599,6 +624,8 @@ def main(argv=None):
                    help="print the matrix and the restart plan, run nothing")
     s.set_defaults(func=cmd_sweep)
 
+
+def _parser_harness(sub):
     s = sub.add_parser("harness",
                        help="run a suite through a real coding harness (opencode, pi, ...)")
     s.add_argument("harness_cmd", nargs="?", default="run",
@@ -628,9 +655,13 @@ def main(argv=None):
                    help="leave each task's working directory on disk for inspection")
     s.set_defaults(func=cmd_harness)
 
+
+def _parser_configs(sub):
     s = sub.add_parser("configs", help="list known-good serving configs")
     s.set_defaults(func=cmd_configs)
 
+
+def _parser_apply(sub):
     s = sub.add_parser("apply", help="install a known-good config as the active launcher")
     s.add_argument("name", help="config name from `bench configs`")
     s.add_argument("--restart", action="store_true",
@@ -639,8 +670,25 @@ def main(argv=None):
                    help="skip the restart confirmation prompt")
     s.set_defaults(func=cmd_apply)
 
+
+def _build_parser():
+    p = argparse.ArgumentParser(prog="bench", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    _parser_suites(sub)
+    _parser_validate(sub)
+    _parser_run(sub)
+    _parser_report(sub)
+    _parser_compare(sub)
+    _parser_sweep(sub)
+    _parser_harness(sub)
+    _parser_configs(sub)
+    _parser_apply(sub)
+    return p
+
+
+def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
-    args = p.parse_args(argv)
+    args = _build_parser().parse_args(argv)
     # `bench harness models` lists every installed harness; naming one narrows
     # it. argparse cannot tell a default from an explicit `--harness pi`.
     args.harness_explicit = any(a == "--harness" or a.startswith("--harness=")

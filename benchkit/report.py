@@ -18,8 +18,12 @@ BUILTIN_HARNESS = "built-in loop"
 
 
 def load(path):
-    with open(path) as f:
-        d = json.load(f)
+    """Load a result file, naming the file on any parse failure."""
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"{os.path.basename(path)}: {e}") from None
     d["_path"] = os.path.basename(path)
     return d
 
@@ -54,7 +58,8 @@ def _fmt(v, pct=False, digits=1):
 
 def _chart(title, y_label, categories, values, y_max=None, kind="bar"):
     if y_max is None:
-        y_max = max(values) * 1.15 if values else 1
+        mx = max(values) if values else 0
+        y_max = mx * 1.15 if mx else 1
     cats = ", ".join(f'"{c}"' for c in categories)
     vals = ", ".join(f"{v:.4g}" for v in values)
     return (f"```mermaid\n{BAR}\n"
@@ -228,67 +233,57 @@ def rank_setups(runs, labels):
     return "\n".join(out)
 
 
-def build(runs, title, question=None, verdict=None, notes=None, short_labels=None,
-          setups=False):
-    """runs: list of loaded result dicts. Returns Markdown source."""
-    labels = [_label(r) for r in runs]
-    short = short_labels or (_setup_short(runs) if setups
-                             else [_short(r, line) for r, line in zip(runs, labels)])
-    S = [r["summary"] for r in runs]
+def _shared(values, short, fmt=str):
+    """One cell for a setting the runs may or may not agree on.
 
-    out = [f"# {title}\n"]
-    if question:
-        out.append(f"**Question.** {question}\n")
-    if verdict:
-        out.append(f"**Verdict.** {verdict}\n")
+    Silently printing run 0's value hides a methodology mismatch, so when the
+    runs disagree the cell names every value in table order instead.
+    """
+    vals = list(values)
+    if all(v == vals[0] for v in vals):
+        return fmt(vals[0]), True
+    return ("mixed — " + ", ".join(f"{fmt(v)} ({short[i]})"
+                                   for i, v in enumerate(vals)), False)
 
-    # --- setup table ---
-    cfg0 = S[0]["config"]
 
-    def _shared(values, fmt=str):
-        """One cell for a setting the runs may or may not agree on.
+def _endpoint(s):
+    # harness runs record "(harness)" as the config base_url; the real endpoint
+    # the adapter dialled lives on the harness block.
+    url = s["config"]["base_url"]
+    if url == "(harness)":
+        url = (s.get("harness") or {}).get("base_url")
+    if not url or url == "(harness)":
+        return None
+    # claude-code dials the Anthropic surface at the root and the others the
+    # OpenAI-compatible /v1 on the same server; compare hosts, not surfaces.
+    return url.rstrip("/").removesuffix("/v1")
 
-        Silently printing run 0's value hides a methodology mismatch, so when the
-        runs disagree the cell names every value in table order instead.
-        """
-        vals = list(values)
-        if all(v == vals[0] for v in vals):
-            return fmt(vals[0]), True
-        return ("mixed — " + ", ".join(f"{fmt(v)} ({short[i]})"
-                                       for i, v in enumerate(vals)), False)
 
-    def _endpoint(s):
-        # harness runs record "(harness)" as the config base_url; the real endpoint
-        # the adapter dialled lives on the harness block.
-        url = s["config"]["base_url"]
-        if url == "(harness)":
-            url = (s.get("harness") or {}).get("base_url")
-        if not url or url == "(harness)":
-            return None
-        # claude-code dials the Anthropic surface at the root and the others the
-        # OpenAI-compatible /v1 on the same server; compare hosts, not surfaces.
-        return url.rstrip("/").removesuffix("/v1")
-
-    # a run that simply did not record its endpoint is not a disagreement about it
-    eps = [_endpoint(s) for s in S]
+def _endpoint_cell(eps, short):
+    """The Setup table's endpoint row: one host when they agree, every host otherwise."""
     known = [(short[i], e) for i, e in enumerate(eps) if e]
     if not known:
-        endpoint = "not recorded"
-    elif all(e == known[0][1] for _, e in known):
+        return "not recorded"
+    if all(e == known[0][1] for _, e in known):
         endpoint = f"`{known[0][1]}`"
         if len(known) < len(eps):
             missing = ", ".join(short[i] for i, e in enumerate(eps) if not e)
             endpoint += f" (not recorded for {missing})"
-    else:
-        endpoint = "mixed — " + ", ".join(f"`{e}` ({n})" for n, e in known)
-    tasks, _ = _shared([s["tasks"] for s in S])
-    conc, conc_same = _shared([s["config"]["concurrency"] for s in S])
-    samples, samples_same = _shared([s["config"]["samples"] for s in S])
-    gens, _ = _shared([s["generations"] for s in S])
+        return endpoint
+    return "mixed — " + ", ".join(f"`{e}` ({n})" for n, e in known)
 
-    out.append("## Setup\n")
+
+def _setup_section(S, short):
+    """The Setup table, plus the sample settings the caveats quote back."""
+    eps = [_endpoint(s) for s in S]
+    tasks, _ = _shared([s["tasks"] for s in S], short)
+    conc, conc_same = _shared([s["config"]["concurrency"] for s in S], short)
+    samples, samples_same = _shared([s["config"]["samples"] for s in S], short)
+    gens, _ = _shared([s["generations"] for s in S], short)
+
+    out = ["## Setup\n"]
     out.append("| | |\n|---|---|")
-    out.append(f"| Endpoint | {endpoint} |")
+    out.append(f"| Endpoint | {_endpoint_cell(eps, short)} |")
     out.append(f"| Tasks | {tasks} |")
     if samples_same:
         out.append(f"| Samples per task | {samples} (⇒ {gens} generations per run) |")
@@ -301,27 +296,31 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
                    "Solve rate and tool-call counts are unaffected, but wall-clock is not "
                    "comparable across rows that differ in concurrency, and scores from "
                    "different sample counts carry different noise floors.</sub>\n")
+    return out, samples, samples_same
 
-    # --- results table ---
-    agentic = all(s.get("kind") == "agentic" for s in S)
-    # agentic runs predating oracle-par efficiency carry no agent_score; they can
-    # still be reported, just without the column that ranks them.
-    scored = agentic and all(s.get("agent_score") is not None for s in S)
-    out.append("## Results\n")
-    # rank agentic runs on the agent score; solve rate ties too often to rank on
+
+def _leaders(S, runs, setups, scored):
+    """Which rows the results table bolds: each block's leader in a sweep."""
     if setups:
-        # A sweep spans several harnesses and both thinking modes, so a single
-        # bolded row would be a cross-harness verdict printed directly above the
-        # section explaining that no such verdict exists. Bold each comparable
-        # block's leader instead.
         leaders = set()
         for idx in _blocks(runs).values():
             key = _block_key(S, idx)
             leaders.add(max(idx, key=lambda i, key=key: (S[i].get(key) or 0)))
-    else:
-        leaders = {max(range(len(S)),
-                       key=lambda i: (S[i]["agent_score"] if scored
-                                      else S[i]["pass_at_1"]))}
+        return leaders
+    return {max(range(len(S)),
+                key=lambda i: (S[i]["agent_score"] if scored
+                               else S[i]["pass_at_1"]))}
+
+
+def _results_section(runs, S, labels, setups):
+    """The results table and its footnotes; also whether runs are agentic/scored."""
+    agentic = all(s.get("kind") == "agentic" for s in S)
+    # agentic runs predating oracle-par efficiency carry no agent_score; they can
+    # still be reported, just without the column that ranks them.
+    scored = agentic and all(s.get("agent_score") is not None for s in S)
+    leaders = _leaders(S, runs, setups, scored)
+    out = ["## Results\n"]
+    # rank agentic runs on the agent score; solve rate ties too often to rank on
     if scored:
         out.append("| Run | Agent score | Solved | Efficiency | Mean calls | Par "
                    "| Valid calls | Turn-limit | Wall |\n"
@@ -377,8 +376,11 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
                    "different harnesses are not comparable, and neither are the "
                    "charts that follow.</sub>\n")
         out.append(rank_setups(runs, labels))
+    return out, agentic, scored
 
-    # --- charts ---
+
+def _charts_section(S, short, agentic, scored):
+    out = []
     out.append(_chart("Solve rate (%)" if agentic else "pass@1 (%)",
                       "solved %" if agentic else "pass@1 %", short,
                       [s["pass_at_1"] * 100 for s in S], y_max=100))
@@ -396,45 +398,75 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     else:
         out.append(_chart("Mean output tokens per answer", "tokens", short,
                           [s["mean_completion_tokens"] or 0 for s in S]))
+    return out
 
-    # --- accuracy by difficulty, one line per run ---
+
+def _difficulty_section(S, labels):
+    """Accuracy by difficulty, one mermaid line per run."""
     diffs = ["easy", "medium", "hard"]
     lines = "\n".join(
         "    line [" + ", ".join(f"{(s['by_difficulty'].get(d) or 0) * 100:.4g}" for d in diffs) + "]"
         for s in S)
-    out.append("```mermaid\n" + BAR + "\n"
-               '    title "pass@1 by difficulty (%)"\n'
-               '    x-axis ["easy", "medium", "hard"]\n'
-               '    y-axis "pass@1 %" 0 --> 100\n' + lines + "\n```\n")
+    out = ["```mermaid\n" + BAR + "\n"
+           '    title "pass@1 by difficulty (%)"\n'
+           '    x-axis ["easy", "medium", "hard"]\n'
+           '    y-axis "pass@1 %" 0 --> 100\n' + lines + "\n```\n"]
     out.append("<sub>" + " · ".join(f"Line {i+1} = {line}" for i, line in enumerate(labels)) + "</sub>\n")
+    return out
 
-    # --- per-task disagreement between best and runner-up ---
-    # A head-to-head across harnesses or thinking modes is the cross-block
-    # comparison the ranking exists to forbid, so in a sweep the pair must come
-    # from one block -- and if no block holds two runs, there is no pair.
+
+def _disagreement_section(runs, S, labels, setups, scored):
+    """Per-task disagreement between the best run and the runner-up.
+
+    A head-to-head across harnesses or thinking modes is the cross-block
+    comparison the ranking exists to forbid, so in a sweep the pair must come
+    from one block -- and if no block holds two runs, there is no pair.
+    The pair is selected using the *same* key the results table used to bold
+    the winner, so the disagreement section never compares a pair excluding
+    the declared winner.
+    """
     pool = range(len(S))
     if setups:
         candidates = [idx for idx in _blocks(runs).values() if len(idx) >= 2]
-        pool = max(candidates,
-                   key=lambda idx: max(S[i]["pass_at_1"] for i in idx)) if candidates else []
-    if len(pool) >= 2:
-        order = sorted(pool, key=lambda i: -S[i]["pass_at_1"])[:2]
-        a, b = order
-        ta, tb = S[a]["by_task"], S[b]["by_task"]
-        rows = [(t, ta[t], tb.get(t, 0.0)) for t in sorted(ta) if ta[t] != tb.get(t, 0.0)]
-        if rows:
-            out.append(f"## Where they disagree — {labels[a]} vs {labels[b]}\n")
-            out.append(f"| Task | {labels[a]} | {labels[b]} | Winner |\n|---|---|---|---|")
-            for t, x, y in rows:
-                out.append(f"| `{t}` | {x*100:.0f} % | {y*100:.0f} % | "
-                           f"{labels[a] if x > y else labels[b]} |")
-            out.append("")
+        pool = (max(candidates,
+                    key=lambda idx: max(S[i].get("agent_score") if scored
+                                        else S[i]["pass_at_1"] for i in idx))
+                if candidates else [])
+    if len(pool) < 2:
+        return []
+    key = "agent_score" if scored else "pass_at_1"
+    order = sorted(pool, key=lambda i: -(S[i].get(key) or S[i][key]))[:2]
+    a, b = order
+    ta, tb = S[a]["by_task"], S[b]["by_task"]
+    # Include every task from both runs; tasks only in one run show as "–"
+    all_tasks = sorted(set(ta) | set(tb))
+    rows = []
+    for t in all_tasks:
+        x = ta.get(t)
+        y = tb.get(t)
+        if x is None:
+            rows.append((t, None, y, labels[b]))
+        elif y is None:
+            rows.append((t, x, None, labels[a]))
+        elif x != y:
+            rows.append((t, x, y, labels[a] if x > y else labels[b]))
+    if not rows:
+        return []
+    out = [f"## Where they disagree — {labels[a]} vs {labels[b]}\n"]
+    out.append(f"| Task | {labels[a]} | {labels[b]} | Winner |\n|---|---|---|---|")
+    for t, x, y, winner in rows:
+        if x is None:
+            out.append(f"| `{t}` | – | {y*100:.0f} % | {winner} (not run) |")
+        elif y is None:
+            out.append(f"| `{t}` | {x*100:.0f} % | – | {winner} (not run) |")
+        else:
+            out.append(f"| `{t}` | {x*100:.0f} % | {y*100:.0f} % | {winner} |")
+    out.append("")
+    return out
 
-    if notes:
-        out.append("## Reading the numbers\n")
-        out.append(notes.strip() + "\n")
 
-    out.append("## Caveats\n")
+def _caveats_section(cfg0, samples, samples_same, agentic):
+    out = ["## Caveats\n"]
     if samples_same:
         out.append(f"- {cfg0['samples']} samples per task. Differences under ~8 points are "
                    "noise, not signal.")
@@ -456,8 +488,46 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     else:
         out.append("- A truncated generation counts as a failure; a high `Truncated` column means "
                    "runaway reasoning, which hangs real agents.")
-    out.append("\n## Raw data\n")
+    return out
+
+
+def _raw_data_section(runs, labels):
+    out = ["\n## Raw data\n"]
     for r, line in zip(runs, labels):
         out.append(f"- `{r['_path']}` — {line}")
     out.append("")
+    return out
+
+
+def build(runs, title, question=None, verdict=None, notes=None, short_labels=None,
+          setups=False):
+    """runs: list of loaded result dicts. Returns Markdown source."""
+    labels = [_label(r) for r in runs]
+    short = short_labels or (_setup_short(runs) if setups
+                             else [_short(r, line) for r, line in zip(runs, labels)])
+    S = [r["summary"] for r in runs]
+
+    out = [f"# {title}\n"]
+    if question:
+        out.append(f"**Question.** {question}\n")
+    if verdict:
+        out.append(f"**Verdict.** {verdict}\n")
+    cfg0 = S[0]["config"]
+
+    setup_lines, samples, samples_same = _setup_section(S, short)
+    out.extend(setup_lines)
+
+    result_lines, agentic, scored = _results_section(runs, S, labels, setups)
+    out.extend(result_lines)
+
+    out.extend(_charts_section(S, short, agentic, scored))
+    out.extend(_difficulty_section(S, labels))
+    out.extend(_disagreement_section(runs, S, labels, setups, scored))
+
+    if notes:
+        out.append("## Reading the numbers\n")
+        out.append(notes.strip() + "\n")
+
+    out.extend(_caveats_section(cfg0, samples, samples_same, agentic))
+    out.extend(_raw_data_section(runs, labels))
     return "\n".join(out)

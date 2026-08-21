@@ -62,7 +62,8 @@ import shutil
 import subprocess
 import urllib.request
 
-from .base import Harness, HarnessResult
+from .base import Harness, HarnessConfig, HarnessResult
+from .events import parse_events as _parse_events
 
 THINKING_LEVELS = {False: "off", True: "high"}
 
@@ -86,17 +87,17 @@ ENDPOINT_MAX_TOKENS = 16384
 class PiHarness(Harness):
     name = "pi"
 
-    def __init__(self, provider=None, model=None, base_url=None,
-                 binary="pi", agent_dir=None, api_key=None, extra_args=()):
-        self.base_url = base_url or None
-        self.provider = provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
-        self.model = model
-        self.binary = binary
+    def __init__(self, cfg=None, *, agent_dir=None):
+        c = cfg or HarnessConfig()
+        self.base_url = c.base_url or None
+        self.provider = c.provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
+        self.model = c.model
+        self.binary = c.binary or "pi"
         #: the user's own agent directory. Read for a normal run, and in
         #: endpoint mode not even that — it is never opened for writing.
         self.agent_dir = agent_dir or os.environ.get("PI_CODING_AGENT_DIR")
-        self.api_key = api_key
-        self.extra_args = list(extra_args)
+        self.api_key = c.api_key
+        self.extra_args = list(c.extra_args)
 
     @property
     def uses_endpoint(self):
@@ -358,51 +359,44 @@ class PiHarness(Harness):
         res = parse_events(p.stdout)
         if p.returncode != 0 and not res.error:
             res.stop_reason = "error"
-            res.error = (p.stderr or "").strip().splitlines()[-1:] and \
-                (p.stderr or "").strip().splitlines()[-1][:200] or f"exit {p.returncode}"
+            tail = (p.stderr or "").strip().splitlines()
+            res.error = tail[-1][:200] if tail else f"exit {p.returncode}"
         return res
+
+
+def _pi_handler(ev, res, _state):
+    """Handle one pi event. Mutates *res* in place."""
+    t = ev.get("type")
+    if t == "turn_start":
+        res.turns += 1
+    elif t == "tool_execution_start":
+        res.tool_calls += 1
+        name = ev.get("toolName", "?")
+        res.trace.append(name)
+        # open_calls was for a start/end correlation that was never completed —
+        # left behind when the skeleton was first written; removed in #32.
+    elif t == "tool_execution_end":
+        if _call_failed(ev):
+            res.failed_calls += 1
+    elif t == "message_end":
+        m = ev.get("message") or {}
+        if m.get("role") == "assistant":
+            u = m.get("usage") or {}
+            res.input_tokens += u.get("input") or 0
+            res.output_tokens += u.get("output") or 0
+            res.reasoning_tokens += u.get("reasoning") or 0
+            if m.get("stopReason"):
+                res.stop_reason = m["stopReason"]
+    elif t == "agent_end":
+        res.stop_reason = ev.get("reason") or res.stop_reason or "agent_end"
+    elif t == "error":
+        res.error = str(ev.get("message") or ev)[:200]
+        res.stop_reason = "error"
 
 
 def parse_events(stdout):
     """Fold pi's JSONL event stream into a HarnessResult."""
-    res = HarnessResult(raw_log=stdout[-20000:])
-    open_calls = {}
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line or not line.startswith("{"):
-            continue
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        t = ev.get("type")
-        if t == "turn_start":
-            res.turns += 1
-        elif t == "tool_execution_start":
-            res.tool_calls += 1
-            name = ev.get("toolName", "?")
-            res.trace.append(name)
-            open_calls[ev.get("toolCallId")] = name
-        elif t == "tool_execution_end":
-            if _call_failed(ev):
-                res.failed_calls += 1
-        elif t == "message_end":
-            m = ev.get("message") or {}
-            if m.get("role") == "assistant":
-                u = m.get("usage") or {}
-                res.input_tokens += u.get("input") or 0
-                res.output_tokens += u.get("output") or 0
-                res.reasoning_tokens += u.get("reasoning") or 0
-                if m.get("stopReason"):
-                    res.stop_reason = m["stopReason"]
-        elif t == "agent_end":
-            res.stop_reason = ev.get("reason") or res.stop_reason or "agent_end"
-        elif t == "error":
-            res.error = str(ev.get("message") or ev)[:200]
-            res.stop_reason = "error"
-    if res.stop_reason == "unknown" and res.turns:
-        res.stop_reason = "finished"
-    return res
+    return _parse_events(stdout, _pi_handler)
 
 
 def _call_failed(ev):

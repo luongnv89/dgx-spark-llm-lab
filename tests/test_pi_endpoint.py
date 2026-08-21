@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import get  # noqa: E402
+from benchkit.harness import HarnessConfig, get  # noqa: E402
 from benchkit.harness.pi import (  # noqa: E402
     CATALOGUE_NAME,
     DEFAULT_ENDPOINT_PROVIDER,
@@ -54,9 +54,9 @@ class PiEndpointCase(unittest.TestCase):
         self.container = os.path.join(self.tmp.name, "container")
         os.makedirs(self.container)
 
-    def harness(self, **kw):
+    def harness(self, cfg=None, **kw):
         kw.setdefault("agent_dir", self.agent_dir)
-        return get("pi", **kw)
+        return get("pi", cfg, **kw)
 
     def staged(self):
         return os.path.join(self.container, STAGED_AGENT_DIR, CATALOGUE_NAME)
@@ -73,7 +73,7 @@ class PiEndpointCase(unittest.TestCase):
 
 class TestEndpointStaging(PiEndpointCase):
     def test_prepare_writes_the_endpoint_provider_into_a_copy(self):
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         workdir = h.prepare(self.container)
 
         catalogue = self.read_json(self.staged())
@@ -87,7 +87,7 @@ class TestEndpointStaging(PiEndpointCase):
 
     def test_no_user_credentials_are_copied_into_the_run(self):
         """Only the injected provider is staged; their apiKeys stay put."""
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         h.prepare(self.container)
         with open(self.staged()) as f:
             body = f.read()
@@ -97,7 +97,7 @@ class TestEndpointStaging(PiEndpointCase):
 
     def test_repeated_prepare_does_not_compound_or_share_state(self):
         """One instance serves every task, and the runner threads them."""
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         first = h.prepare(self.container)
         second_container = os.path.join(self.tmp.name, "container-2")
         os.makedirs(second_container)
@@ -118,12 +118,12 @@ class TestEndpointStaging(PiEndpointCase):
 
     def test_the_users_catalogue_is_never_written(self):
         """The whole reason pi refused an endpoint before: prove it is safe."""
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         h.prepare(self.container)
         self.assert_user_config_untouched()
 
     def test_the_subprocess_is_pointed_at_the_staged_catalogue(self):
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         workdir = h.prepare(self.container)
         env = h._env(h._staged_dir(workdir))
         self.assertEqual(env["PI_CODING_AGENT_DIR"],
@@ -132,7 +132,7 @@ class TestEndpointStaging(PiEndpointCase):
 
     def test_the_injected_provider_is_addressable(self):
         """`--provider benchkit` is only passed if pi would accept it."""
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         workdir = h.prepare(self.container)
         staged = h._staged_dir(workdir)
         self.assertTrue(h._provider_addressable(staged))
@@ -146,7 +146,7 @@ class TestEndpointStaging(PiEndpointCase):
         """Endpoint mode must work on a machine with no pi config at all."""
         empty = os.path.join(self.tmp.name, "nothing-here")
         os.makedirs(empty)
-        h = get("pi", model="served-model", base_url=ENDPOINT, agent_dir=empty)
+        h = get("pi", HarnessConfig(model="served-model", base_url=ENDPOINT), agent_dir=empty)
         h.prepare(self.container)
         providers = self.read_json(self.staged())["providers"]
         self.assertEqual(list(providers), [DEFAULT_ENDPOINT_PROVIDER])
@@ -155,13 +155,14 @@ class TestEndpointStaging(PiEndpointCase):
     def test_nothing_is_created_in_the_users_agent_dir(self):
         """Not one new file: the run has no business writing there at all."""
         before = sorted(os.listdir(self.agent_dir))
-        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT))
         h.prepare(self.container)
         self.assertEqual(sorted(os.listdir(self.agent_dir)), before)
         self.assert_user_config_untouched()
 
     def test_an_explicit_api_key_reaches_the_staged_provider(self):
-        h = self.harness(model="served-model", base_url=ENDPOINT, api_key="k")
+        h = self.harness(HarnessConfig(model="served-model", base_url=ENDPOINT,
+                                       api_key="k"))
         h.prepare(self.container)
         providers = self.read_json(self.staged())["providers"]
         self.assertEqual(providers[DEFAULT_ENDPOINT_PROVIDER]["apiKey"], "k")
@@ -171,7 +172,7 @@ class TestWithoutAnEndpoint(PiEndpointCase):
     """No --endpoint means nothing is staged and nothing is redirected."""
 
     def test_prepare_stages_nothing(self):
-        h = self.harness(provider="local-dgx", model="montimage-dgx-spark")
+        h = self.harness(HarnessConfig(provider="local-dgx", model="montimage-dgx-spark"))
         workdir = h.prepare(self.container)
         self.assertEqual(workdir, self.container)
         self.assertFalse(os.path.exists(
@@ -179,14 +180,14 @@ class TestWithoutAnEndpoint(PiEndpointCase):
         self.assert_user_config_untouched()
 
     def test_the_users_own_agent_dir_is_still_used(self):
-        h = self.harness(provider="local-dgx", model="montimage-dgx-spark")
+        h = self.harness(HarnessConfig(provider="local-dgx", model="montimage-dgx-spark"))
         h.prepare(self.container)
         self.assertEqual(h.agent_dir, self.agent_dir)
         self.assertEqual(h._env()["PI_CODING_AGENT_DIR"], self.agent_dir)
         self.assertEqual(h._catalogue_path(), self.catalogue)
 
     def test_the_users_catalogue_still_resolves_the_model(self):
-        h = self.harness(provider="local-dgx", model="montimage-dgx-spark")
+        h = self.harness(HarnessConfig(provider="local-dgx", model="montimage-dgx-spark"))
         self.assertEqual(h._catalogue_models(),
                          [("local-dgx", "montimage-dgx-spark")])
         self.assertFalse(h.uses_endpoint)
@@ -235,13 +236,13 @@ class TestEndpointAvailability(PiEndpointCase):
         self.url = f"http://127.0.0.1:{self.server.server_port}/v1"
 
     def test_a_served_model_is_accepted(self):
-        h = self.harness(model="served-model", base_url=self.url)
+        h = self.harness(HarnessConfig(model="served-model", base_url=self.url))
         ok, detail = h.available()
         self.assertTrue(ok, detail)
         self.assertIn(self.url, detail)
 
     def test_a_model_the_endpoint_does_not_serve_is_named(self):
-        h = self.harness(model="not-there", base_url=self.url)
+        h = self.harness(HarnessConfig(model="not-there", base_url=self.url))
         ok, detail = h.available()
         self.assertFalse(ok)
         self.assertIn("not-there", detail)
@@ -249,20 +250,20 @@ class TestEndpointAvailability(PiEndpointCase):
 
     def test_the_catalogue_is_not_consulted_in_endpoint_mode(self):
         """`local-dgx/montimage-dgx-spark` is in the fixture and irrelevant here."""
-        h = self.harness(model="montimage-dgx-spark", base_url=self.url)
+        h = self.harness(HarnessConfig(model="montimage-dgx-spark", base_url=self.url))
         ok, detail = h.available()
         self.assertFalse(ok, "the user's catalogue must not vouch for an endpoint")
         self.assertIn("not served at", detail)
 
     def test_an_unreachable_endpoint_says_so(self):
-        h = self.harness(model="served-model", base_url="http://127.0.0.1:1/v1")
+        h = self.harness(HarnessConfig(model="served-model", base_url="http://127.0.0.1:1/v1"))
         ok, detail = h.available()
         self.assertFalse(ok)
         self.assertIn("unreachable", detail)
 
     def test_endpoint_mode_enumerates_nothing(self):
         """The injected provider exists for one run; there is no list to show."""
-        h = self.harness(model="served-model", base_url=self.url)
+        h = self.harness(HarnessConfig(model="served-model", base_url=self.url))
         self.assertEqual(h.list_models(), [])
 
 

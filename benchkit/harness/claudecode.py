@@ -65,7 +65,8 @@ import shutil
 import subprocess
 import urllib.request
 
-from .base import Harness, HarnessResult
+from .base import Harness, HarnessConfig, HarnessResult
+from .events import parse_events as _parse_events
 
 #: Built-in tools the model is allowed. Deliberately excludes Task/Workflow
 #: (subagents, which can reach other models) and WebSearch/WebFetch (outside
@@ -91,21 +92,20 @@ class ClaudeCodeHarness(Harness):
 
     _config_home = None
 
-    def __init__(self, provider=None, model=None,
-                 base_url=None, binary="claude", api_key="sk-local",
-                 tools=DEFAULT_TOOLS, effort=None, extra_args=()):
+    def __init__(self, cfg=None, *, tools=DEFAULT_TOOLS, effort=None):
         # `provider` exists only so the shared CLI flag is accepted; Claude Code
         # has no provider concept for a custom base URL.
-        self.provider = provider
-        self.model = model
+        c = cfg or HarnessConfig()
+        self.provider = c.provider
+        self.model = c.model
         # No endpoint means "use the install as the user has it": their auth,
         # their default base URL. Only an explicit one is injected.
-        self.base_url = _api_root(base_url) if base_url else None
-        self.binary = binary
-        self.api_key = api_key
+        self.base_url = _api_root(c.base_url) if c.base_url else None
+        self.binary = c.binary or "claude"
+        self.api_key = c.api_key or "sk-local"
         self.tools = list(tools)
         self.effort = effort
-        self.extra_args = list(extra_args)
+        self.extra_args = list(c.extra_args)
 
     # --- discovery ------------------------------------------------------
     def _version(self):
@@ -286,61 +286,53 @@ def _api_root(url):
     return url[:-3].rstrip("/") if url.endswith("/v1") else url
 
 
-def parse_events(stdout):
-    """Fold Claude Code's stream-json event stream into a HarnessResult."""
-    res = HarnessResult(raw_log=stdout[-20000:])
-    seen_calls = set()
-    assistant_msgs = set()
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        t = ev.get("type")
-        if t == "assistant":
-            msg = ev.get("message") or {}
-            assistant_msgs.add(msg.get("id"))
-            for block in msg.get("content") or []:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    # one message is emitted once per content block, all sharing
-                    # an id; dedupe on the tool_use id rather than the message
-                    tid = block.get("id")
-                    if tid in seen_calls:
-                        continue
-                    seen_calls.add(tid)
+def _claudecode_handler(ev, res, state):
+    """Handle one Claude Code event. Mutates *res* in place."""
+    t = ev.get("type")
+    if t == "assistant":
+        msg = ev.get("message") or {}
+        state.setdefault("assistant_msgs", set()).add(msg.get("id"))
+        for block in msg.get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                # one message is emitted once per content block, all sharing
+                # an id; dedupe on the tool_use id rather than the message
+                seen = state.setdefault("seen_calls", set())
+                tid = block.get("id")
+                if tid not in seen:
+                    seen.add(tid)
                     res.tool_calls += 1
                     res.trace.append(block.get("name", "?"))
-        elif t == "user":
-            msg = ev.get("message") or {}
-            for block in msg.get("content") or []:
-                if (isinstance(block, dict) and block.get("type") == "tool_result"
-                        and block.get("is_error")):
-                    res.failed_calls += 1
-        elif t == "result":
-            res.turns = ev.get("num_turns") or res.turns
-            u = ev.get("usage") or {}
-            # cache tokens are prefill too; the input column must stay comparable
-            # with pi's and opencode's, which count every token sent.
-            res.input_tokens += ((u.get("input_tokens") or 0)
-                                 + (u.get("cache_creation_input_tokens") or 0)
-                                 + (u.get("cache_read_input_tokens") or 0))
-            res.output_tokens += u.get("output_tokens") or 0
-            # always 0 on this endpoint — see the module docstring and describe()
-            res.reasoning_tokens += (
-                (u.get("output_tokens_details") or {}).get("thinking_tokens") or 0)
-            if ev.get("subtype") == "success":
-                res.stop_reason = ev.get("stop_reason") or "end_turn"
-            else:
-                res.stop_reason = "error"
-                res.error = str(ev.get("result") or ev.get("subtype") or "error")[:200]
-            if ev.get("is_error"):
-                res.stop_reason = "error"
-                res.error = res.error or str(ev.get("result") or "error")[:200]
+    elif t == "user":
+        msg = ev.get("message") or {}
+        for block in msg.get("content") or []:
+            if (isinstance(block, dict) and block.get("type") == "tool_result"
+                    and block.get("is_error")):
+                res.failed_calls += 1
+    elif t == "result":
+        res.turns = ev.get("num_turns") or res.turns
+        u = ev.get("usage") or {}
+        res.input_tokens += ((u.get("input_tokens") or 0)
+                             + (u.get("cache_creation_input_tokens") or 0)
+                             + (u.get("cache_read_input_tokens") or 0))
+        res.output_tokens += u.get("output_tokens") or 0
+        res.reasoning_tokens += (
+            (u.get("output_tokens_details") or {}).get("thinking_tokens") or 0)
+        if ev.get("subtype") == "success":
+            res.stop_reason = ev.get("stop_reason") or "end_turn"
+        else:
+            res.stop_reason = "error"
+            res.error = str(ev.get("result") or ev.get("subtype") or "error")[:200]
+        if ev.get("is_error"):
+            res.stop_reason = "error"
+            res.error = res.error or str(ev.get("result") or "error")[:200]
+
+
+def _claudecode_finalize(res, state):
+    """A stream cut off before its result event still has the assistant turns."""
     if not res.turns:
-        res.turns = len(assistant_msgs)
-    if res.stop_reason == "unknown" and res.turns:
-        res.stop_reason = "finished"
-    return res
+        res.turns = len(state.get("assistant_msgs", ()))
+
+
+def parse_events(stdout):
+    """Fold Claude Code's stream-json event stream into a HarnessResult."""
+    return _parse_events(stdout, _claudecode_handler, _claudecode_finalize)

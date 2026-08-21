@@ -16,7 +16,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 
-from ..agentic.env import Workspace
+from ..agentic.env import Workspace, materialise
 
 
 @dataclass
@@ -32,6 +32,22 @@ class HarnessResult:
     error: str = ""
     trace: list = field(default_factory=list)
     raw_log: str = ""
+
+
+@dataclass(frozen=True)
+class HarnessConfig:
+    """How a run reaches its model: the fields every harness adapter shares.
+
+    One object instead of seven constructor kwargs, so each adapter's __init__
+    carries only what is genuinely its own — claude-code's tool pinning,
+    opencode's variant, pi's agent directory.
+    """
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    binary: str | None = None
+    api_key: str | None = None
+    extra_args: tuple[str, ...] = ()
 
 
 class Harness:
@@ -85,11 +101,7 @@ def run_task(harness, task, sample, timeout=900, thinking=False, keep_dir=False)
     container = tempfile.mkdtemp(prefix=f"benchkit-{harness.name}-")
     workdir = harness.prepare(container)
     try:
-        for path, body in task["files"].items():
-            full = os.path.join(workdir, path)
-            os.makedirs(os.path.dirname(full) or workdir, exist_ok=True)
-            with open(full, "w") as f:
-                f.write(body)
+        materialise(task["files"], workdir)
 
         t0 = time.perf_counter()
         hr = harness.run(workdir, task["prompt"], timeout=timeout, thinking=thinking)

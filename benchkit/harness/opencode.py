@@ -34,7 +34,8 @@ import os
 import shutil
 import subprocess
 
-from .base import Harness, HarnessResult
+from .base import Harness, HarnessConfig, HarnessResult
+from .events import parse_events as _parse_events
 
 CONFIG_NAME = "opencode.json"
 
@@ -47,15 +48,15 @@ class OpenCodeHarness(Harness):
 
     _config_path = None
 
-    def __init__(self, provider=None, model=None, base_url=None,
-                 binary="opencode", variant=None, api_key=None, extra_args=()):
-        self.base_url = base_url or None
-        self.provider = provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
-        self.model = model
-        self.binary = binary
+    def __init__(self, cfg=None, *, variant=None):
+        c = cfg or HarnessConfig()
+        self.base_url = c.base_url or None
+        self.provider = c.provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
+        self.model = c.model
+        self.binary = c.binary or "opencode"
         self.variant = variant
-        self.api_key = api_key
-        self.extra_args = list(extra_args)
+        self.api_key = c.api_key
+        self.extra_args = list(c.extra_args)
 
     @property
     def uses_endpoint(self):
@@ -230,37 +231,30 @@ class OpenCodeHarness(Harness):
         return res
 
 
+def _opencode_handler(ev, res, _state):
+    """Handle one opencode event. Mutates *res* in place."""
+    t = ev.get("type")
+    part = ev.get("part") or {}
+    if t == "step_start":
+        res.turns += 1
+    elif t == "tool_use":
+        res.tool_calls += 1
+        res.trace.append(part.get("tool", "?"))
+        status = (part.get("state") or {}).get("status")
+        if status not in ("completed", "running", "pending", None):
+            res.failed_calls += 1
+    elif t == "step_finish":
+        tok = part.get("tokens") or {}
+        res.input_tokens += tok.get("input") or 0
+        res.output_tokens += tok.get("output") or 0
+        res.reasoning_tokens += tok.get("reasoning") or 0
+        if part.get("reason"):
+            res.stop_reason = part["reason"]
+    elif t == "error":
+        res.error = str(part or ev)[:200]
+        res.stop_reason = "error"
+
+
 def parse_events(stdout):
     """Fold opencode's JSONL event stream into a HarnessResult."""
-    res = HarnessResult(raw_log=stdout[-20000:])
-    for line in stdout.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        t = ev.get("type")
-        part = ev.get("part") or {}
-        if t == "step_start":
-            res.turns += 1
-        elif t == "tool_use":
-            res.tool_calls += 1
-            res.trace.append(part.get("tool", "?"))
-            status = (part.get("state") or {}).get("status")
-            if status not in ("completed", "running", "pending", None):
-                res.failed_calls += 1
-        elif t == "step_finish":
-            tok = part.get("tokens") or {}
-            res.input_tokens += tok.get("input") or 0
-            res.output_tokens += tok.get("output") or 0
-            res.reasoning_tokens += tok.get("reasoning") or 0
-            if part.get("reason"):
-                res.stop_reason = part["reason"]
-        elif t == "error":
-            res.error = str(part or ev)[:200]
-            res.stop_reason = "error"
-    if res.stop_reason == "unknown" and res.turns:
-        res.stop_reason = "finished"
-    return res
+    return _parse_events(stdout, _opencode_handler)
