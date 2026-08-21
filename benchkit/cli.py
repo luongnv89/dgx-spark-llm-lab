@@ -216,7 +216,7 @@ def cmd_harness(args):
         return 0
 
     # --- which model, from the user's own setup --------------------------
-    probe = H.get(args.harness, **_endpoint_kw(args.harness, endpoint))
+    probe = H.get(args.harness, **_endpoint_kw(endpoint))
     entries = [] if endpoint else hmodels.catalogue(probe)
     spec = args.model or os.environ.get("BENCH_HARNESS_MODEL") or ""
     if spec:
@@ -227,7 +227,7 @@ def cmd_harness(args):
         provider, model = hmodels.pick(args.harness, entries)
 
     h = H.get(args.harness, provider=provider, model=model,
-              **_endpoint_kw(args.harness, endpoint))
+              **_endpoint_kw(endpoint))
     tasks = get(args.suite)
     if kind(args.suite) != "agentic":
         raise SystemExit("harness runs need an agentic suite "
@@ -273,8 +273,13 @@ def cmd_harness(args):
     return 0
 
 
-def _endpoint_kw(name, endpoint):
-    """An explicit endpoint is opt-in, and not every harness can take one."""
+def _endpoint_kw(endpoint):
+    """An explicit endpoint is opt-in; all three harnesses accept one.
+
+    Every adapter points its tool at a throwaway config for the run rather than
+    editing the user's — opencode via OPENCODE_CONFIG, claude-code via
+    CLAUDE_CONFIG_DIR, pi via a staged catalogue behind PI_CODING_AGENT_DIR.
+    """
     if not endpoint:
         return {}
     return {"base_url": endpoint}
@@ -391,8 +396,9 @@ def main(argv=None):
     s.add_argument("--provider", help="restrict --model to one provider")
     s.add_argument("--endpoint", default="",
                    help="OpenAI-compatible endpoint to point the harness at for "
-                        "this run instead of using its configured providers "
-                        "(default: BENCH_HARNESS_ENDPOINT; pi does not support it)")
+                        "this run instead of using its configured providers, "
+                        "without touching your harness config "
+                        "(default: BENCH_HARNESS_ENDPOINT)")
     s.add_argument("--suite", default="agentic-hard", choices=list(SUITES))
     s.add_argument("--samples", type=int, default=1)
     s.add_argument("--concurrency", type=int, default=2)

@@ -13,8 +13,10 @@ is being measured:
   answered with the list of real choices instead of a `ProviderModelNotFound`
   error a second into every task.
 - **explicit endpoint** (`--endpoint`): the harness is pointed at an
-  OpenAI-compatible server for this run only. The catalogue does not apply — the
-  model id is whatever that server reports — so the spec is taken literally.
+  OpenAI-compatible server for this run only, through a throwaway config the run
+  owns, so the user's own harness configuration is never written to. Every
+  harness supports this. The catalogue does not apply — the model id is whatever
+  that server reports — so the spec is taken literally.
 """
 import sys
 
