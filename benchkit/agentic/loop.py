@@ -48,6 +48,69 @@ def _args_of(tc):
     return args, False
 
 
+def _chat(client, cfg, messages):
+    """One chat completion with the suite's tools attached."""
+    kw = {}
+    if cfg.temperature is not None:
+        kw["temperature"] = cfg.temperature
+    return client.chat.completions.create(
+        model=cfg.model, messages=messages, tools=TOOLS, tool_choice="auto",
+        max_tokens=cfg.max_tokens,
+        extra_body={"chat_template_kwargs": {"enable_thinking": cfg.thinking,
+                                             "preserve_thinking": cfg.thinking}},
+        **kw)
+
+
+def _assistant_message(msg, calls):
+    return {"role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [{"id": c.id, "type": "function",
+                            "function": {"name": c.function.name,
+                                         "arguments": c.function.arguments}}
+                           for c in calls] or None}
+
+
+def _execute_calls(ws, messages, calls):
+    """Run one turn's tool calls against the workspace.
+
+    Returns (malformed, unknown) -- the hygiene counts this turn added.
+    """
+    malformed = unknown = 0
+    for tc in calls:
+        name = tc.function.name
+        args, bad = _args_of(tc)
+        if bad:
+            malformed += 1
+            out = ("error: arguments were not a JSON object. Send valid JSON "
+                   "matching the tool's schema.")
+            ws.record(name, {"_raw": str(tc.function.arguments)[:200]}, False, out)
+        else:
+            ok, out = call(ws, name, args)
+            if not ok and out.startswith("no such tool"):
+                unknown += 1
+        messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
+    return malformed, unknown
+
+
+def _score(ws, task):
+    """Check the final workspace, then apply the no-tool-calls guard.
+
+    Returns (solved, detail, total_calls).
+    """
+    try:
+        solved, detail = task["check"](ws)
+    except Exception as e:  # noqa: BLE001 — a broken predicate is a test bug, report it
+        solved, detail = False, f"check raised {e!r}"
+
+    total_calls = len(ws.calls)
+    # A model that replies in prose with no tool calls has not done any work.
+    solved, new_detail = _no_tool_calls(solved, total_calls)
+    if new_detail:
+        solved = False
+        detail = new_detail
+    return solved, detail, total_calls
+
+
 def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
     t0 = time.perf_counter()
     ws = Workspace(task["files"])
@@ -60,43 +123,18 @@ def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
 
     try:
         for turns in range(1, max_turns + 1):
-            kw = {}
-            if cfg.temperature is not None:
-                kw["temperature"] = cfg.temperature
-            resp = client.chat.completions.create(
-                model=cfg.model, messages=messages, tools=TOOLS, tool_choice="auto",
-                max_tokens=cfg.max_tokens,
-                extra_body={"chat_template_kwargs": {"enable_thinking": cfg.thinking,
-                                                     "preserve_thinking": cfg.thinking}},
-                **kw)
+            resp = _chat(client, cfg, messages)
             if resp.usage:
                 completion_tokens += resp.usage.completion_tokens or 0
             msg = resp.choices[0].message
             calls = msg.tool_calls or []
-            messages.append({
-                "role": "assistant",
-                "content": msg.content or "",
-                "tool_calls": [{"id": c.id, "type": "function",
-                                "function": {"name": c.function.name,
-                                             "arguments": c.function.arguments}}
-                               for c in calls] or None,
-            })
+            messages.append(_assistant_message(msg, calls))
             if not calls:
                 stop_reason = "no_tool_call"
                 break
-            for tc in calls:
-                name = tc.function.name
-                args, bad = _args_of(tc)
-                if bad:
-                    malformed += 1
-                    out = ("error: arguments were not a JSON object. Send valid JSON "
-                           "matching the tool's schema.")
-                    ws.record(name, {"_raw": str(tc.function.arguments)[:200]}, False, out)
-                else:
-                    ok, out = call(ws, name, args)
-                    if not ok and out.startswith("no such tool"):
-                        unknown += 1
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": out})
+            m, u = _execute_calls(ws, messages, calls)
+            malformed += m
+            unknown += u
             if ws.finished is not None:
                 stop_reason = "finished"
                 break
@@ -105,17 +143,7 @@ def run_task(client, cfg, task, sample, max_turns=MAX_TURNS):
         error = f"{type(e).__name__}: {e}"
 
     elapsed = time.perf_counter() - t0
-    try:
-        solved, detail = task["check"](ws)
-    except Exception as e:  # noqa: BLE001 — a broken predicate is a test bug, report it
-        solved, detail = False, f"check raised {e!r}"
-
-    total_calls = len(ws.calls)
-    # A model that replies in prose with no tool calls has not done any work.
-    solved, new_detail = _no_tool_calls(solved, total_calls)
-    if new_detail:
-        solved = False
-        detail = new_detail
+    solved, detail, total_calls = _score(ws, task)
 
     par = par_calls(task)
     # Efficiency only means something for a solved task: failing in three calls is
