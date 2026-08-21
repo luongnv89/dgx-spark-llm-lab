@@ -124,9 +124,16 @@ The suites above measure the model through benchkit's own tool loop, which is no
 setup. If a coding agent is installed on this machine, measure through it too:
 
 ```bash
-./bench harness list
-./bench harness run --harness pi --suite agentic-hard --samples 2
+./bench harness list                     # which harnesses are installed
+./bench harness models                   # which models they can reach, from your own config
+./bench harness run --harness opencode -m <provider>/<model> --suite agentic-hard --samples 2
 ```
+
+The harness runs use **your** opencode / pi configuration and credentials — whatever you can
+run in the editor, you can benchmark. Pick the model with `-m` (any unique part of a
+`provider/model` pair works), or omit it and choose from the list at the start of the run.
+For a server the harness has no entry for, `--endpoint <url>` points it there for that run
+only, without touching your config.
 
 The gap is not cosmetic — on this repo's first such comparison the same model scored 67.4
 through the built-in loop and 77.4 through pi. When you report a number, name the harness it
@@ -155,6 +162,8 @@ row is a guess, not a known-good config.
   repo cost a model 12.5 points until it was found; the model was innocent. When driving an
   external harness, a run with zero turns is almost always a wiring problem, not a model
   failure — check `docs/HARNESSES.md` before recording it.
+- **Name the model as well as the harness.** `opencode` is not a score; `opencode` +
+  `ollama/qwen3-coder:latest` is. Result labels and filenames carry both for this reason.
 - **Never let a harness extension call a different model.** pi's extensions can; the adapter
   passes `--no-extensions` for exactly this reason. Verify the equivalent for any harness you
   add, or the benchmark silently measures something else.

@@ -8,14 +8,15 @@ pip install -r requirements.txt          # openai>=1.40
 ./bench validate --suite agentic-all      # 16/16
 ./bench run --suite all --label "..."     # full evaluation
 ./bench compare <A> <B> --both-modes      # head-to-head
+./bench harness models                    # models your opencode/pi can reach
+./bench harness run --harness opencode -m <p>/<m>   # benchmark one of them
 ./bench apply <config> --restart          # install winner
 ```
 
 ## Toolchain floor
 
 - **Python ≥ 3.10** (router.py:70, benchkit/runner.py:35)
-- **Runtime**: `openai>=1.40` only
-- **Endpoint**: any OpenAI-compatible server
+- **Runtime**: `openai>=1.40` only; **endpoint**: any OpenAI-compatible server
 
 ## Environment variables
 
@@ -30,6 +31,8 @@ All `BENCH_*` vars read by `benchkit/runner.py:Config.from_env()`:
 | `BENCH_SAMPLES` | `2` | Samples per task |
 | `BENCH_CONCURRENCY` | `4` | Parallel tasks |
 | `BENCH_TEST_TIMEOUT` | `60` | Test timeout (s) |
+| `BENCH_HARNESS_MODEL` | — | `provider/model` the harness benchmarks |
+| `BENCH_HARNESS_ENDPOINT` | — | Point a harness at this endpoint, not its own providers |
 | `PI_CODING_AGENT_DIR` | — | pi agent directory |
 
 Full list with comments: `.env.example`.
@@ -44,10 +47,9 @@ Full list with comments: `.env.example`.
 │   ├── runner.py        # Config + suite runner
 │   ├── suites/          # one-shot task definitions
 │   ├── agentic/         # agentic tasks + oracles
-│   ├── harness/         # pi.py, opencode.py adapters
+│   ├── harness/         # pi.py, opencode.py, claudecode.py + models.py picker
 │   └── references.py    # reference solutions
-├── configs/             # serving recipes
-├── results/             # append-only run archives
+├── configs/             # serving recipes; results/ — append-only archives
 ├── AGENTS.md            # model-evaluation runbook
 └── README.md            # project overview
 ```
@@ -64,16 +66,14 @@ Full list with comments: `.env.example`.
 
 ## Workflow preferences
 
-- Read `AGENTS.md` first — it is the full runbook.
-- Always take a baseline of the incumbent before evaluating a new model.
-- Use `./bench compare` for head-to-head; it swaps the model, restarts, and restores.
-- For the pi harness: `./bench harness run --harness pi --suite agentic-hard`.
+- Read `AGENTS.md` first — the full runbook.
+- Baseline the incumbent before evaluating a new model.
+- `./bench compare` for head-to-head; it swaps the model, restarts, and restores.
+- Harness runs use **your** opencode/pi config; pick the model with `-m` (`./bench harness models`).
 
 ## Token Efficiency
-- Never re-read files you just wrote or edited. You know the contents.
-- Never re-run commands to "verify" unless the outcome was uncertain.
+- Never re-read files you just wrote or edited; never re-run commands to "verify" a certain outcome.
 - Don't echo back large blocks of code or file contents unless asked.
 - Batch related edits into single operations. Don't make 5 edits when 1 handles it.
-- Skip confirmations like "I'll continue..." Just do it.
-- If a task needs 1 tool call, don't use 3. Plan before acting.
+- Skip confirmations like "I'll continue..." Just do it. If a task needs 1 tool call, don't use 3.
 - Do not summarize what you just did unless the result is ambiguous or you need additional input.

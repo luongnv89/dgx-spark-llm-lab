@@ -27,6 +27,9 @@ serve, not a number you quote:
   wins by thinking for 16k tokens has not won.
 - **Two workload shapes.** One-shot code generation *and* multi-turn agentic tool calling,
   because they disagree.
+- **Your harness and your models, not ours.** `bench harness models` lists what your
+  opencode or pi install can already reach; pick one and benchmark it. Nothing is written to
+  your editor's configuration.
 - **Your harness, not ours.** The same model scores 12 points apart through four different
   tool loops, so the suites also run through the coding agent you actually use (`pi`,
   `opencode`, `claude-code`).
@@ -99,8 +102,9 @@ program runs in a subprocess. It passes or it does not.
 | `./bench validate` | Prove every task's hidden tests are passable |
 | `./bench run` | Run a suite against an endpoint, write a result JSON |
 | `./bench report *.json` | Build a Markdown report with mermaid charts |
-| `./bench harness list` | Which coding harnesses on this machine can be benchmarked (`pi`, `opencode`) |
-| `./bench harness run --harness pi` | Run a suite through a real harness instead of our tool loop |
+| `./bench harness list` | Which coding harnesses are installed here (`pi`, `opencode`, `claude-code`) |
+| `./bench harness models` | Which models each of them can reach, from **your** config |
+| `./bench harness run --harness opencode -m <provider>/<model>` | Run a suite through a real harness, on a model you pick, instead of our tool loop |
 | `./bench configs` | List known-good serving configs |
 | `./bench apply <name> [--restart]` | Install one as your live server config |
 | `./bench compare <model>...` | DGX box only: swap, run, restore, report — one command |
