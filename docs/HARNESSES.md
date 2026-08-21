@@ -48,7 +48,7 @@ accept it, and none of them writes to your own configuration to do it:
 |---|---|
 | `opencode` | a throwaway provider config next to the temp workspace, handed over as `OPENCODE_CONFIG` |
 | `claude-code` | `ANTHROPIC_BASE_URL` plus a throwaway `CLAUDE_CONFIG_DIR` |
-| `pi` | a **copy** of your catalogue in the run's temp dir with one extra provider, handed over as `PI_CODING_AGENT_DIR` |
+| `pi` | a throwaway catalogue in the run's temp dir holding one extra provider, handed over as `PI_CODING_AGENT_DIR` |
 
 In this mode the harness catalogue does not apply, so `--model` must name the id that
 endpoint serves — it is checked against the endpoint's `/models` before the run starts:
@@ -122,15 +122,18 @@ provider/model pairs it prints; `available()` then re-checks the choice against
 ### Pointing it at an endpoint it has never heard of
 
 pi takes no base URL on the command line, so `--endpoint` is served the same way the other
-two adapters serve it: with a throwaway config the run owns. `prepare()` reads
-`~/.pi/agent/models.json` (or `PI_CODING_AGENT_DIR`), **copies** it into the run's temp
-directory, adds one synthetic `benchkit` provider of `api: openai-completions` pointed at
-the endpoint, and exports `PI_CODING_AGENT_DIR` for the subprocess only.
+two adapters serve it: with a throwaway config the run owns. `prepare()` writes a catalogue
+into the run's temp directory holding a single synthetic `benchkit` provider of
+`api: openai-completions` pointed at the endpoint, and exports `PI_CODING_AGENT_DIR` for the
+subprocess only.
 
-Your `models.json` is opened for reading and never for writing — copy out, never write
-back — and a run without `--endpoint` stages nothing at all and uses your own catalogue and
-credentials unchanged. The staged copy lives in a *sibling* of the workspace, so it never
-appears in the directory that gets read back and scored.
+Your `~/.pi/agent/models.json` is never written, and in endpoint mode never even read: your
+own providers are deliberately left out of the staged catalogue, so no `apiKey` of yours is
+duplicated into a temp directory and nothing in the run can reach a model other than the one
+being benchmarked. A run *without* `--endpoint` stages nothing at all and uses your own
+catalogue and credentials unchanged. The staged catalogue lives in a *sibling* of the
+workspace, so it never appears in the directory that gets read back and scored, and its path
+comes from that task's own temp dir — tasks run on a thread pool and must not share it.
 
 ```bash
 ./bench harness run --harness pi --endpoint http://localhost:8001/v1 -m montimage-dgx-spark

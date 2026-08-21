@@ -85,13 +85,36 @@ class TestEndpointStaging(PiEndpointCase):
         self.assertTrue(workdir.startswith(self.container))
         self.assertNotEqual(os.path.dirname(self.staged()), workdir)
 
-    def test_the_users_own_providers_survive_in_the_copy(self):
-        """Copying, not replacing: their providers stay reachable in the run."""
+    def test_no_user_credentials_are_copied_into_the_run(self):
+        """Only the injected provider is staged; their apiKeys stay put."""
         h = self.harness(model="served-model", base_url=ENDPOINT)
         h.prepare(self.container)
-        providers = self.read_json(self.staged())["providers"]
-        self.assertIn("local-dgx", providers)
-        self.assertIn(DEFAULT_ENDPOINT_PROVIDER, providers)
+        with open(self.staged()) as f:
+            body = f.read()
+        self.assertNotIn("secret-of-the-user", body)
+        self.assertEqual(list(json.loads(body)["providers"]),
+                         [DEFAULT_ENDPOINT_PROVIDER])
+
+    def test_repeated_prepare_does_not_compound_or_share_state(self):
+        """One instance serves every task, and the runner threads them."""
+        h = self.harness(model="served-model", base_url=ENDPOINT)
+        first = h.prepare(self.container)
+        second_container = os.path.join(self.tmp.name, "container-2")
+        os.makedirs(second_container)
+        second = h.prepare(second_container)
+
+        self.assertNotEqual(first, second)
+        staged_2 = os.path.join(second_container, STAGED_AGENT_DIR, CATALOGUE_NAME)
+        self.assertEqual(self.read_json(self.staged()),
+                         self.read_json(staged_2))
+        # each task's subprocess must be pointed at its *own* staged dir, not
+        # at whichever one prepare() ran last
+        self.assertEqual(h._env(h._staged_dir(first))["PI_CODING_AGENT_DIR"],
+                         os.path.join(self.container, STAGED_AGENT_DIR))
+        self.assertEqual(h._env(h._staged_dir(second))["PI_CODING_AGENT_DIR"],
+                         os.path.join(second_container, STAGED_AGENT_DIR))
+        self.assertEqual(h.agent_dir, self.agent_dir)
+        self.assert_user_config_untouched()
 
     def test_the_users_catalogue_is_never_written(self):
         """The whole reason pi refused an endpoint before: prove it is safe."""
@@ -99,10 +122,10 @@ class TestEndpointStaging(PiEndpointCase):
         h.prepare(self.container)
         self.assert_user_config_untouched()
 
-    def test_the_subprocess_is_pointed_at_the_copy(self):
+    def test_the_subprocess_is_pointed_at_the_staged_catalogue(self):
         h = self.harness(model="served-model", base_url=ENDPOINT)
-        h.prepare(self.container)
-        env = h._env()
+        workdir = h.prepare(self.container)
+        env = h._env(h._staged_dir(workdir))
         self.assertEqual(env["PI_CODING_AGENT_DIR"],
                          os.path.join(self.container, STAGED_AGENT_DIR))
         self.assertNotEqual(env["PI_CODING_AGENT_DIR"], self.agent_dir)
@@ -110,9 +133,10 @@ class TestEndpointStaging(PiEndpointCase):
     def test_the_injected_provider_is_addressable(self):
         """`--provider benchkit` is only passed if pi would accept it."""
         h = self.harness(model="served-model", base_url=ENDPOINT)
-        h.prepare(self.container)
-        self.assertTrue(h._provider_addressable())
-        argv = h._argv("do the thing", thinking=False)
+        workdir = h.prepare(self.container)
+        staged = h._staged_dir(workdir)
+        self.assertTrue(h._provider_addressable(staged))
+        argv = h._argv("do the thing", thinking=False, agent_dir=staged)
         self.assertIn("--provider", argv)
         self.assertEqual(argv[argv.index("--provider") + 1],
                          DEFAULT_ENDPOINT_PROVIDER)
@@ -127,6 +151,14 @@ class TestEndpointStaging(PiEndpointCase):
         providers = self.read_json(self.staged())["providers"]
         self.assertEqual(list(providers), [DEFAULT_ENDPOINT_PROVIDER])
         self.assertFalse(os.path.exists(os.path.join(empty, CATALOGUE_NAME)))
+
+    def test_nothing_is_created_in_the_users_agent_dir(self):
+        """Not one new file: the run has no business writing there at all."""
+        before = sorted(os.listdir(self.agent_dir))
+        h = self.harness(model="served-model", base_url=ENDPOINT)
+        h.prepare(self.container)
+        self.assertEqual(sorted(os.listdir(self.agent_dir)), before)
+        self.assert_user_config_untouched()
 
     def test_an_explicit_api_key_reaches_the_staged_provider(self):
         h = self.harness(model="served-model", base_url=ENDPOINT, api_key="k")

@@ -41,10 +41,11 @@ kept for labelling and reporting either way.
 a freshly served HuggingFace model, a local vLLM — without touching their pi
 configuration. pi has no base-URL flag, so the adapter does the same thing the
 opencode and claude-code adapters do with `OPENCODE_CONFIG` / `CLAUDE_CONFIG_DIR`:
-it stages a *copy* of the catalogue in the run's temp directory, adds one
-synthetic OpenAI-compatible provider pointing at the endpoint, and hands that
-copy to the subprocess through `PI_CODING_AGENT_DIR`. The user's
-`~/.pi/agent/models.json` is read and never written — copy out, never write back.
+it stages a throwaway catalogue in the run's temp directory holding one
+synthetic OpenAI-compatible provider pointed at the endpoint, and hands it to
+the subprocess through `PI_CODING_AGENT_DIR`. The user's
+`~/.pi/agent/models.json` is never written, and in this mode never even read —
+their credentials stay where they are.
 
 ```bash
 bench harness run --harness pi --endpoint http://localhost:8001/v1 \
@@ -91,10 +92,9 @@ class PiHarness(Harness):
         self.provider = provider or (DEFAULT_ENDPOINT_PROVIDER if self.base_url else None)
         self.model = model
         self.binary = binary
+        #: the user's own agent directory. Read for a normal run, and in
+        #: endpoint mode not even that — it is never opened for writing.
         self.agent_dir = agent_dir or os.environ.get("PI_CODING_AGENT_DIR")
-        #: the user's own agent directory, resolved once. Read, never written:
-        #: endpoint mode copies out of it and repoints `agent_dir` at the copy.
-        self.source_agent_dir = self.agent_dir or DEFAULT_AGENT_DIR
         self.api_key = api_key
         self.extra_args = list(extra_args)
 
@@ -115,10 +115,11 @@ class PiHarness(Harness):
         except Exception as e:  # noqa: BLE001
             return None, f"{self.binary} --version failed: {e}"
 
-    def _env(self):
+    def _env(self, agent_dir=None):
         env = dict(os.environ)
-        if self.agent_dir:
-            env["PI_CODING_AGENT_DIR"] = self.agent_dir
+        agent_dir = agent_dir or self.agent_dir
+        if agent_dir:
+            env["PI_CODING_AGENT_DIR"] = agent_dir
         env["PI_OFFLINE"] = "1"     # no update checks mid-benchmark
         return env
 
@@ -242,13 +243,17 @@ class PiHarness(Harness):
     def prepare(self, container):
         """Endpoint mode: task files in container/work, staged catalogue beside.
 
-        The user's pi configuration is copied out and never written back. We
-        read their catalogue, add one synthetic OpenAI-compatible provider to
-        the *copy*, write the copy into the run's own temp directory, and point
-        `PI_CODING_AGENT_DIR` at it for the subprocess only — the seam `_env()`
-        and `_catalogue_path()` already honour. Staging it in a sibling of the
-        workspace rather than in the workspace itself keeps `models.json` out of
-        the directory that gets read back and scored.
+        The staged catalogue is written into the run's own temp directory and
+        handed to the subprocess through `PI_CODING_AGENT_DIR` — the seam
+        `_env()` and `_catalogue_path()` already honour. Staging it in a sibling
+        of the workspace rather than in the workspace itself keeps `models.json`
+        out of the directory that gets read back and scored.
+
+        Its path is derived from `container`, never remembered on `self`: a
+        single harness instance serves every task, and the runner drives those
+        tasks on a thread pool, so an instance field would let one task's
+        subprocess be pointed at another task's directory after that one had
+        been cleaned up.
 
         Without `--endpoint` nothing is staged and nothing is redirected: the
         run uses the user's own catalogue and credentials, unchanged.
@@ -261,15 +266,24 @@ class PiHarness(Harness):
         os.makedirs(staged, exist_ok=True)
         with open(os.path.join(staged, CATALOGUE_NAME), "w") as f:
             json.dump(self._staged_catalogue(), f, indent=2)
-        self.agent_dir = staged
         return workdir
 
+    def _staged_dir(self, workdir):
+        """Where `prepare()` put this task's catalogue, from its workdir alone."""
+        return os.path.join(os.path.dirname(workdir), STAGED_AGENT_DIR)
+
     def _staged_catalogue(self):
-        """The user's providers plus ours — as a new dict, never their file."""
-        providers, _ = self._catalogue(self.source_agent_dir)
-        merged = dict(providers or {})
-        merged[self.provider] = self._endpoint_provider()
-        return {"providers": merged}
+        """A catalogue holding the endpoint provider and nothing else.
+
+        The user's own providers are deliberately *not* copied in. Nothing in an
+        endpoint run can address them — `--model`/`--provider` both name the
+        injected one — so copying them would only duplicate their `apiKey`
+        values into a temp directory for no benefit, and would leave a route by
+        which a run could reach a model other than the one being benchmarked.
+        Their file is never opened here at all: copy out, never write back, and
+        in this mode not even copy.
+        """
+        return {"providers": {self.provider: self._endpoint_provider()}}
 
     def _endpoint_provider(self):
         """One synthetic OpenAI-compatible provider aimed at `--endpoint`."""
@@ -293,11 +307,12 @@ class PiHarness(Harness):
         }
 
     # --- execution ------------------------------------------------------
-    def _argv(self, prompt, thinking):
+    def _argv(self, prompt, thinking, agent_dir=None):
         return [
             self.binary, "-p", prompt,
             # Only providers pi itself will accept; see the module docstring.
-            *(["--provider", self.provider] if self._provider_addressable() else []),
+            *(["--provider", self.provider]
+              if self._provider_addressable(agent_dir) else []),
             "--model", self.model,
             "--thinking", THINKING_LEVELS[bool(thinking)],
             "--mode", "json",
@@ -307,17 +322,21 @@ class PiHarness(Harness):
             "--approve",            # trust the temp workspace, do not block on a prompt
         ] + self.extra_args
 
-    def _provider_addressable(self):
+    def _provider_addressable(self, agent_dir=None):
         """Is `--provider <name>` a thing pi will accept, or listing-only?"""
         if not self.provider:
             return False
-        provs, err = self._catalogue()
+        provs, err = self._catalogue(agent_dir)
         return bool(not err and self.provider in provs)
 
     def run(self, workdir, prompt, timeout=900, thinking=False):
-        env = self._env()
+        # Endpoint mode reads the catalogue this task staged, found from the
+        # workdir rather than from shared state — see prepare().
+        agent_dir = self._staged_dir(workdir) if self.uses_endpoint else None
+        env = self._env(agent_dir)
         try:
-            p = subprocess.run(self._argv(prompt, thinking), cwd=workdir, env=env,
+            p = subprocess.run(self._argv(prompt, thinking, agent_dir),
+                               cwd=workdir, env=env,
                                capture_output=True, text=True, timeout=timeout,
                                # pi blocks forever on an inherited stdin it can never
                                # read; every task then times out with zero turns.

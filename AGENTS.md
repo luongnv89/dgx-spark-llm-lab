@@ -138,7 +138,7 @@ run in the editor, you can benchmark. Pick the model with `-m` (any unique part 
 `provider/model` pair works), or omit it and choose from the list at the start of the run.
 For a server the harness has no entry for, `--endpoint <url>` points it there for that run
 only, without touching your config. All three harnesses accept it — opencode and claude-code
-through a throwaway config, pi through a copy of your catalogue staged in the run's temp
+through a throwaway config, pi through a throwaway catalogue staged in the run's temp
 directory.
 
 The gap is not cosmetic — on this repo's first such comparison the same model scored 67.4
