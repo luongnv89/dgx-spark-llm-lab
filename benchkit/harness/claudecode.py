@@ -287,17 +287,20 @@ def _api_root(url):
     return url[:-3].rstrip("/") if url.endswith("/v1") else url
 
 
-def _claudecode_handler(ev, res, _state):
+def _claudecode_handler(ev, res, state):
     """Handle one Claude Code event. Mutates *res* in place."""
     t = ev.get("type")
     if t == "assistant":
-        _state["assistant_count"] += 1
         msg = ev.get("message") or {}
+        state.setdefault("assistant_msgs", set()).add(msg.get("id"))
         for block in msg.get("content") or []:
             if isinstance(block, dict) and block.get("type") == "tool_use":
+                # one message is emitted once per content block, all sharing
+                # an id; dedupe on the tool_use id rather than the message
+                seen = state.setdefault("seen_calls", set())
                 tid = block.get("id")
-                if tid not in _state["seen_calls"]:
-                    _state["seen_calls"].add(tid)
+                if tid not in seen:
+                    seen.add(tid)
                     res.tool_calls += 1
                     res.trace.append(block.get("name", "?"))
     elif t == "user":
@@ -325,10 +328,12 @@ def _claudecode_handler(ev, res, _state):
             res.error = res.error or str(ev.get("result") or "error")[:200]
 
 
+def _claudecode_finalize(res, state):
+    """A stream cut off before its result event still has the assistant turns."""
+    if not res.turns:
+        res.turns = len(state.get("assistant_msgs", ()))
+
+
 def parse_events(stdout):
     """Fold Claude Code's stream-json event stream into a HarnessResult."""
-    _state = {"seen_calls": set(), "assistant_count": 0}
-    res = _parse_events(stdout, lambda ev, r: _claudecode_handler(ev, r, _state))
-    if not res.turns:
-        res.turns = _state["assistant_count"]
-    return res
+    return _parse_events(stdout, _claudecode_handler, _claudecode_finalize)

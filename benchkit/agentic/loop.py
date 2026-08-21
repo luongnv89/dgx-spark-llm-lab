@@ -205,6 +205,17 @@ def summarize(results, cfg, wall, n_tasks):
     common["mean_par_calls"] = (
         sum(r["par_calls"] for r in results if r.get("par_calls"))
         / max(1, sum(1 for r in results if r.get("par_calls"))))
+    # Token stats keep the agentic semantics: every row counts, including the
+    # zero-token rows a backend that reports no usage produces. _summarize_common
+    # drops falsy values for the one-shot runner; that would inflate these.
+    common["mean_completion_tokens"] = mean("completion_tokens")
+    common["median_completion_tokens"] = (
+        sorted(r["completion_tokens"] for r in results)[len(results) // 2]
+        if results else None)
+    common["mean_tok_s"] = mean("tok_s")
+    common["mean_ttft"] = None  # the harness loop never measures TTFT
+    common["aggregate_tok_s"] = (sum(r["completion_tokens"] for r in results) / wall) \
+        if wall else None
     common["truncated"] = 0
     common["errored"] = sum(1 for r in results if r["stop_reason"] == "error")
     # --- agentic-specific ---

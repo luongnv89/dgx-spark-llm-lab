@@ -7,7 +7,7 @@ shrinks to that map plus its own quirks.
 
 Usage::
 
-    def _handle(ev, res):
+    def _handle(ev, res, state):
         t = ev.get("type")
         if t == "turn_start":
             res.turns += 1
@@ -18,13 +18,17 @@ Usage::
 import json
 
 
-def parse_events(stdout, handler):
+def parse_events(stdout, handler, finalize=None):
     """Fold a JSONL event stream into a HarnessResult using *handler*.
 
     *handler* is a callable ``(event_dict, HarnessResult, state) -> None`` that
     inspects ``event_dict["type"]`` (or any other key) and mutates the result.
     *state* is a mutable dict shared across all calls, for deduplication and
     counters that cannot live on the result object.
+
+    *finalize*, when given, is ``(HarnessResult, state) -> None`` and runs once
+    after the last event — before this function applies its default stop_reason,
+    so a fallback that fills in *turns* still feeds that default.
 
     Lines that are not valid JSON objects are silently skipped.
     """
@@ -39,6 +43,8 @@ def parse_events(stdout, handler):
         except ValueError:
             continue
         handler(ev, res, _state)
+    if finalize is not None:
+        finalize(res, _state)
     if res.stop_reason == "unknown" and res.turns:
         res.stop_reason = "finished"
     return res
