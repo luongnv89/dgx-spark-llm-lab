@@ -35,7 +35,6 @@ class TestWrongTestNotCodeCheck(unittest.TestCase):
     def setUp(self):
         self.task = _wrong_test_task()
         self.original_tests = self.task["files"]["tests.py"]
-        self.original_code = self.task["files"]["business_days.py"]
 
     def test_untouched_workspace_queries_changed_lines_once(self):
         ws = CountingWorkspace(dict(self.task["files"]))
