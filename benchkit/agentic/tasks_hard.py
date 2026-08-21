@@ -636,9 +636,9 @@ print("OK")
     },
     check=lambda ws: ((False, "business_days.py was modified — it matched the documented behaviour")
                       if ws.files.get("business_days.py") != ws.initial.get("business_days.py")
-                      else ((False, f"changed {ws.changed_lines('tests.py')} lines of tests.py; "
+                      else ((False, f"changed {n} lines of tests.py; "
                                     "only the incorrect expectation needed to change")
-                            if ws.changed_lines("tests.py") > 4 else _visible(ws))),
+                            if (n := ws.changed_lines("tests.py")) > 4 else _visible(ws))),
     oracle=lambda ws: [
         call(ws, "run_python", {"path": "tests.py"}),
         call(ws, "read_file", {"path": "DOCS.md"}),
