@@ -128,8 +128,13 @@ def cmd_report(args):
     runs = [report.load(p) for p in args.results]
     notes = open(args.notes).read() if args.notes else None
     md = report.build(runs, title=args.title, question=args.question,
-                      verdict=args.verdict, notes=notes)
+                      verdict=args.verdict, notes=notes, setups=args.setups)
     out = args.out or os.path.join(os.path.dirname(args.results[0]), "REPORT.md")
+    if os.path.exists(out) and not args.force:
+        # results/ is append-only, and the default output path lands straight in
+        # a finished campaign's directory.
+        raise SystemExit(f"refusing to overwrite an existing report: {out}\n"
+                         "Pass --out <path> to write elsewhere, or --force.")
     with open(out, "w") as f:
         f.write(md)
     print(f"written to {out}")
@@ -179,6 +184,135 @@ def cmd_compare(args):
     md = report.build([report.load(p) for p in paths], title=args.title,
                       question=args.question)
     out = os.path.join(outdir, "REPORT.md")
+    with open(out, "w") as f:
+        f.write(md)
+    print(f"\nreport written to {out}")
+    return 0
+
+
+def _sweep_model(args, setup):
+    """Resolve one harness setup's model spec, as a user error not a traceback.
+
+    Called once up front for the whole matrix as well as at run time, so a typo
+    is answered before the first endpoint restart rather than after it.
+    """
+    from benchkit.harness import models as hmodels
+    spec = setup.model or args.model
+    try:
+        # in endpoint mode the id is whatever the server reports, so it is taken
+        # literally; there is no catalogue to match against
+        return hmodels.resolve(spec, [])
+    except hmodels.ModelSpecError as e:
+        raise SystemExit(f"setup {setup.resolved_label(args.model)!r}: {e}") from e
+
+
+def _sweep_harness(args, setup):
+    """Build and probe the harness one setup needs. Every failure is a user error.
+
+    Called from the pre-flight pass as well as from the run, so a wrong suite
+    kind, a bad model spec or an uninstalled harness is reported before the
+    first endpoint restart rather than after it -- a shared endpoint should
+    never be restarted twice to discover a typo.
+    """
+    from benchkit import harness as H
+
+    if kind(args.suite) != "agentic":
+        raise SystemExit(f"setup {setup.resolved_label(args.model)!r} runs through "
+                         f"a harness, which needs an agentic suite; --suite is "
+                         f"{args.suite!r} (try agentic, agentic-hard, agentic-all)")
+    # A sweep exists to measure *this* endpoint, so a harness in a sweep is
+    # always pointed at it rather than at its own configured providers.
+    endpoint = args.endpoint or args.base_url
+    provider, model = _sweep_model(args, setup)
+    h = H.get(setup.harness, provider=provider, model=model, base_url=endpoint)
+    ok, detail = h.available()
+    if not ok:
+        raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
+    return h
+
+
+def _sweep_execute(args, setup, label):
+    """Run one setup row and return its (summary, results).
+
+    The two execution paths differ only in *what* wraps the model: benchkit's
+    own tool loop, or a real harness pointed at this endpoint. Both record the
+    serving config and harness on the run config, which is what lets the report
+    rank setups rather than models.
+    """
+    tasks = get(args.suite)
+    if not setup.harness:
+        cfg = runner.Config(
+            base_url=args.base_url, model=setup.model or args.model, label=label,
+            thinking=setup.thinking,
+            max_tokens=args.max_tokens_think if setup.thinking else args.max_tokens,
+            samples=args.samples, concurrency=args.concurrency,
+            test_timeout=args.test_timeout,
+            serving_config=setup.config or setup.config_name, harness="")
+        return _execute_suite(args.suite, tasks, cfg, max_turns=args.max_turns)
+
+    from benchkit.harness import runner as hrunner
+
+    h = _sweep_harness(args, setup)
+    endpoint = args.endpoint or args.base_url
+    cfg = runner.Config(base_url=endpoint, model=h.model_spec, label=label,
+                        thinking=setup.thinking, max_tokens=0,
+                        samples=args.samples, concurrency=args.concurrency,
+                        test_timeout=args.test_timeout,
+                        serving_config=setup.config or setup.config_name,
+                        harness=h.name)
+    return hrunner.run(h, tasks, cfg, on_result=_print_agentic,
+                       timeout=args.timeout, keep_dirs=False)
+
+
+def cmd_sweep(args):
+    """Sweep an explicit setup matrix and rank the setups, not the models.
+
+    `bench compare` answers "which model?". This answers "which *setup*?" --
+    serving config x harness x thinking mode -- with one endpoint restart per
+    distinct serving config, behind the shared-endpoint approval gate, and with
+    the launcher that was active when the sweep began put back on the way out.
+    """
+    from benchkit import serving, sweep as S
+
+    setups = S.parse_setups(args.setups, known_harnesses=_harness_names(),
+                            default_model=args.model)
+    if args.dry_run:
+        S.check_sweepable(setups, serving)
+        print(S.plan(setups, default_model=args.model))
+        needed = S.configs_needing_swap(setups)
+        print("\nendpoint restarts: " + (", ".join(needed) if needed else "none"))
+        if needed and not args.yes_restart_endpoint:
+            print("  -> would ask for approval first "
+                  "(or pass --yes-restart-endpoint)")
+        return 0
+
+    S.check_sweepable(setups, serving)
+    for setup in setups:
+        if setup.harness:
+            _sweep_harness(args, setup)
+
+    # results/ is append-only and _stamp() is day-granular, so a second sweep
+    # with the same title on the same day would land in the same directory.
+    # Every collision is found now, not after a restart and an hour of runs.
+    outdir = os.path.join(RESULTS, f"{_stamp()}-{_slug(args.title)}")
+    out = os.path.join(outdir, "REPORT.md")
+    taken = [p for p in [out] + S.result_paths(setups, outdir, args.model)
+             if os.path.exists(p)]
+    if taken:
+        raise SystemExit("refusing to overwrite files from an earlier campaign:\n"
+                         + "\n".join(f"  {p}" for p in taken)
+                         + "\nGive this sweep a different --title.")
+    print(f"suite={args.suite}  {S._n(len(setups), 'setup')}  "
+          f"results -> {outdir}\n")
+
+    paths = S.run_sweep(
+        setups, outdir,
+        execute=lambda setup, label: _sweep_execute(args, setup, label),
+        serving=serving, assume_yes=args.yes_restart_endpoint,
+        default_model=args.model)
+
+    md = report.build([report.load(p) for p in paths], title=args.title,
+                      question=args.question, setups=True)
     with open(out, "w") as f:
         f.write(md)
     print(f"\nreport written to {out}")
@@ -288,9 +422,15 @@ def _endpoint_kw(endpoint):
 def cmd_configs(args):
     from benchkit import serving
     active = serving.current_model()
-    for name, model_id, _ in serving.list_configs():
+    ok, skipped = serving.sweepable_configs()
+    for name, model_id, _ in ok:
         mark = " (active model)" if model_id == active else ""
         print(f"{name:<34} {model_id}{mark}")
+    for name, model_id, reason in skipped:
+        # still a known-good recipe, just not one `bench sweep` can install and
+        # restart -- say why here rather than crashing halfway through a sweep.
+        mark = " (active model)" if model_id == active else ""
+        print(f"{name:<34} {model_id}{mark}\n{'':<34} not sweepable: {reason}")
     return 0
 
 
@@ -363,6 +503,11 @@ def main(argv=None):
     s.add_argument("--question")
     s.add_argument("--verdict")
     s.add_argument("--notes", help="path to a Markdown file inserted as analysis")
+    s.add_argument("--setups", action="store_true",
+                   help="add the ranked-setups section, as `bench sweep` writes it "
+                        "— rebuilds a sweep's ranking from its result files")
+    s.add_argument("--force", action="store_true",
+                   help="overwrite the output file if it already exists")
     s.add_argument("--out")
     s.set_defaults(func=cmd_report)
 
@@ -381,6 +526,38 @@ def main(argv=None):
     s.add_argument("--no-restore", dest="restore", action="store_false",
                    help="leave the last model serving instead of restoring the original")
     s.set_defaults(func=cmd_compare)
+
+    s = sub.add_parser("sweep",
+                       help="sweep an explicit setup matrix (config x harness x "
+                            "thinking) and rank the setups")
+    common(s)
+    s.add_argument("--setup", dest="setups", action="append", default=[],
+                   metavar="config=...,harness=...,model=...,thinking=...",
+                   help="one setup, repeatable. Keys: config (a `bench configs` "
+                        "name; omit to use whatever is already serving), harness "
+                        "(omit for benchkit's own loop), model, thinking "
+                        "(on|off|both), label. Setups are explicit on purpose: "
+                        "independent axes cross-product into combinations that "
+                        "cannot exist.")
+    s.add_argument("--title", default="Setup sweep")
+    s.add_argument("--question")
+    s.add_argument("--max-tokens", type=int, default=6000)
+    s.add_argument("--max-tokens-think", type=int, default=16000)
+    s.add_argument("--max-turns", type=int, default=25,
+                   help="agentic suite: tool-calling turns before the task is abandoned")
+    s.add_argument("--timeout", type=int, default=900,
+                   help="harness setups: seconds per task")
+    s.add_argument("--endpoint", default="",
+                   help="endpoint to point harness setups at "
+                        "(default: --base-url, i.e. the endpoint being swept)")
+    s.add_argument("--yes-restart-endpoint", action="store_true",
+                   help="approve restarting the shared serving endpoint once per "
+                        "serving config in the matrix. Without it a sweep that "
+                        "needs a restart refuses to start (CLAUDE.md: never "
+                        "restart a shared endpoint without explicit approval).")
+    s.add_argument("--dry-run", action="store_true",
+                   help="print the matrix and the restart plan, run nothing")
+    s.set_defaults(func=cmd_sweep)
 
     s = sub.add_parser("harness",
                        help="run a suite through a real coding harness (opencode, pi, ...)")

@@ -145,6 +145,35 @@ The gap is not cosmetic — on this repo's first such comparison the same model 
 through the built-in loop and 77.4 through pi. When you report a number, name the harness it
 came from.
 
+## Step 6b — sweep whole setups, not one axis
+
+Steps 4 and 6 vary one axis each. When the question is "what is the best setup on this
+machine", vary all three at once and let the report rank them:
+
+```bash
+./bench sweep --suite agentic-hard --title "setup sweep" --dry-run \
+  --setup config=qwen3.6-35b-a3b-nvfp4,thinking=both \
+  --setup config=qwen3.8-27b-nvfp4-dspark,thinking=both \
+  --setup config=qwen3.6-35b-a3b-nvfp4,harness=opencode,model=montimage-dgx-spark
+```
+
+Always dry-run first: it prints the matrix, the grouping, and exactly how many endpoint
+restarts the sweep would cause, without touching anything.
+
+Then, and only after a human has approved restarting the endpoint, re-run with
+`--yes-restart-endpoint`. Without that flag a sweep that needs a restart refuses to start —
+it never treats a non-interactive session as consent. A sweep whose setups carry no
+`config=` needs no approval at all: it measures the harness and thinking axes against
+whatever is already serving.
+
+Read the report's **Ranked setups** section the way it is written: one block per
+(harness, thinking mode), each with its own winner and its own noise verdict. There is no
+global winner across harnesses, on purpose — see the 67.4 / 77.4 spread in step 6.
+
+`configs/` holds recipes this cannot drive (llama.cpp, the env-tunable standalone server,
+the secondary gemma backend). `bench configs` marks each one and says why; naming one in a
+`--setup` is refused up front rather than halfway through.
+
 ## Step 7 — install the winner
 
 ```bash
@@ -161,7 +190,7 @@ row is a guess, not a known-good config.
   change that destroys the value of the entire repo.
 - **Never delete or overwrite an existing `results/` directory.** They are append-only; a
   superseded campaign stays next to the one that replaced it.
-- **Never restart a shared serving endpoint without explicit human approval.**
+- **Never restart a shared serving endpoint without explicit human approval.** `bench sweep` enforces this: it refuses to start unless a human approved the restarts interactively or passed `--yes-restart-endpoint`.
 - **Do not report a number you did not measure.** No estimating, no carrying a figure over
   from another machine, no quoting the model card.
 - **Report failures that were the harness's fault as such.** One `run_python` bug in this

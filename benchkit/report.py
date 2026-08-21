@@ -9,6 +9,13 @@ import os
 
 BAR = "xychart-beta"
 
+#: CLAUDE.md's noise floor, calibrated at 2 samples per task
+NOISE_POINTS = 8.0
+NOISE_SAMPLES = 2
+
+#: what a run that used benchkit's own tool loop, rather than a harness, is called
+BUILTIN_HARNESS = "built-in loop"
+
 
 def load(path):
     with open(path) as f:
@@ -57,10 +64,176 @@ def _chart(title, y_label, categories, values, y_max=None, kind="bar"):
             f"    {kind} [{vals}]\n```\n")
 
 
-def build(runs, title, question=None, verdict=None, notes=None, short_labels=None):
+def _setup_of(run):
+    """The (harness, thinking, config, model) a run came from, best-effort.
+
+    `bench sweep` records the serving config and harness on the run config, so
+    a swept result is fully attributed. Older result files predate those fields
+    and fall back to whatever the harness block recorded, then to the built-in
+    loop -- an unlabelled row is still reported, just as "not recorded".
+    """
+    s = run["summary"]
+    cfg = s["config"]
+    # harness.describe() emits "harness" (base.py/opencode.py/pi.py/claudecode.py),
+    # not "name" -- reading the wrong key here would file every legacy harness
+    # run under the built-in loop and rank three harnesses inside one block.
+    block = s.get("harness") or {}
+    harness = cfg.get("harness") or block.get("harness") or block.get("name") \
+        or BUILTIN_HARNESS
+    return dict(
+        harness=harness,
+        thinking=bool(cfg.get("thinking")),
+        config=cfg.get("serving_config") or "not recorded",
+        # a swept row that deliberately used the live launcher says so; only a
+        # file that never recorded the field at all is "not recorded"
+        model=cfg.get("served_model_id") or cfg.get("model") or "?",
+        samples=cfg.get("samples"),
+    )
+
+
+def _blocks(runs):
+    """{(harness, thinking): [run index, ...]} — the only comparable groupings.
+
+    One harness in one thinking mode. Everything that names a winner, bolds a
+    row or pairs two runs against each other has to respect this boundary, or
+    the report crowns the harness instead of the setup.
+    """
+    blocks = {}
+    for i, r in enumerate(runs):
+        st = _setup_of(r)
+        blocks.setdefault((st["harness"], st["thinking"]), []).append(i)
+    return blocks
+
+
+def _block_key(S, idx):
+    """Which metric ranks this block: agent score only if every row has one."""
+    return ("agent_score"
+            if all(S[i].get("agent_score") is not None for i in idx)
+            else "pass_at_1")
+
+
+def _setup_short(runs):
+    """Chart-axis labels for a sweep, keyed on the axes a sweep actually varies.
+
+    `_short` keys on the model, which is exactly what a sweep holds constant —
+    it would render three different setups as three identical bars.
+    """
+    out = []
+    for r in runs:
+        st = _setup_of(r)
+        harness = "builtin" if st["harness"] == BUILTIN_HARNESS else st["harness"]
+        cfg = st["config"]
+        cfg = "active" if cfg.startswith("(active") else (
+            "?" if cfg == "not recorded" else cfg)
+        out.append(f"{harness[:7]} {cfg[:8]} {'ON' if st['thinking'] else 'OFF'}")
+    # suffix *every* occurrence of a repeated label, not just the first: a
+    # chart axis reading "opencod cfg-a OFF" twice names neither run.
+    totals = {label: out.count(label) for label in set(out)}
+    seen = {}
+    for i, label in enumerate(out):
+        if totals[label] > 1:
+            seen[label] = seen.get(label, 0) + 1
+            out[i] = f"{label} {seen[label]}"
+    return out
+
+
+def noise_floor(samples):
+    """Points below which a difference is noise, for this many samples per task.
+
+    CLAUDE.md fixes the floor at ~8 points at `--samples 2`. Sampling error
+    shrinks as 1/sqrt(n), so quoting that same 8 points beside a 10-sample run
+    would be pessimistic, and quoting it beside a 1-sample run would be a lie.
+    The scaled figure is still an approximation, and it is named as one.
+    """
+    try:
+        n = max(1, int(samples or NOISE_SAMPLES))
+    except (TypeError, ValueError):
+        n = NOISE_SAMPLES
+    return NOISE_POINTS * (NOISE_SAMPLES / n) ** 0.5
+
+
+def rank_setups(runs, labels):
+    """Markdown ranking setups *within* a comparable block, never across them.
+
+    A block is one harness in one thinking mode. That boundary is not
+    fastidiousness: this repo's own harness-spread campaign in `results/`
+    records a swing on identical weights as large as a model change, so a table
+    that ranks an opencode row above a built-in-loop row is reporting the
+    harness, not the setup. Thinking and non-thinking are likewise two products, never
+    two candidates for one crown. Inside a block the serving config and the
+    model are the axes actually being compared, and there the winner is real --
+    subject to the sample-count noise floor, which every block states.
+    """
+    S = [r["summary"] for r in runs]
+    setups = [_setup_of(r) for r in runs]
+    blocks = _blocks(runs)
+
+    out = ["## Ranked setups\n"]
+    out.append("A setup is the serving config, the harness and the thinking mode "
+               "together. Scores are ranked **within** one harness and one thinking "
+               "mode and nowhere else: identical weights score materially "
+               "differently through different harnesses — see the harness-spread "
+               "campaign in `results/` — and thinking and non-thinking are two "
+               "products, not two candidates. There is deliberately no single "
+               "cross-harness winner below.\n")
+
+    for (harness, thinking), idx in blocks.items():
+        # One metric decides the whole block. A block where any run predates
+        # oracle-par efficiency falls back to pass@1 for *every* row, so the
+        # ranking, the cells and the margin can never quote different rulers.
+        key = _block_key(S, idx)
+        metric = "Agent score" if key == "agent_score" else "pass@1"
+
+        def value(i, key=key):
+            return (S[i].get(key) or 0) * 100
+
+        ranked = sorted(idx, key=lambda i: -value(i))
+        out.append(f"### {harness} · thinking {'ON' if thinking else 'OFF'}\n")
+        out.append(f"| Rank | Serving config | Model | {metric} | Samples |\n"
+                   "|---|---|---|---|---|")
+        for rank, i in enumerate(ranked, 1):
+            st = setups[i]
+            cell = f"**{value(i):.1f}**" if rank == 1 else f"{value(i):.1f}"
+            name = f"**{labels[i]}**" if rank == 1 else labels[i]
+            out.append(f"| {rank} | `{st['config']}` | {st['model']} — {name} "
+                       f"| {cell} | {st['samples']} |")
+        out.append("")
+        best = ranked[0]
+        # the floor is set by the *noisiest* row in the block: quoting the
+        # winner's sample count would understate the noise whenever the
+        # runner-up ran at fewer samples.
+        recorded = [setups[i]["samples"] for i in idx]
+        samples = min((r or NOISE_SAMPLES) for r in recorded)
+        if len(ranked) == 1:
+            out.append(f"**Winner: {labels[best]}** — the only setup in this block, "
+                       "so this is a measurement, not a comparison.\n")
+            continue
+        runner_up = ranked[1]
+        margin = value(best) - value(runner_up)
+        floor = noise_floor(samples)
+        verdict = (f"**Winner: {labels[best]}** — {value(best):.1f} against "
+                   f"{value(runner_up):.1f} for {labels[runner_up]}, "
+                   f"a margin of {margin:.1f} points. ")
+        where = f"at {samples} samples per task"
+        if any(r is None for r in recorded):
+            where += " (assumed — not every run in this block recorded one)"
+        scale = (f"~{floor:.1f} points {where} "
+                 f"(~{NOISE_POINTS:.0f} at {NOISE_SAMPLES}, scaled by 1/sqrt(n))")
+        if margin < floor:
+            verdict += (f"That is **inside the noise floor** of {scale} — treat it as "
+                        "a tie and re-run with more samples before acting on it.")
+        else:
+            verdict += f"That clears the noise floor of {scale}."
+        out.append(verdict + "\n")
+    return "\n".join(out)
+
+
+def build(runs, title, question=None, verdict=None, notes=None, short_labels=None,
+          setups=False):
     """runs: list of loaded result dicts. Returns Markdown source."""
     labels = [_label(r) for r in runs]
-    short = short_labels or [_short(r, line) for r, line in zip(runs, labels)]
+    short = short_labels or (_setup_short(runs) if setups
+                             else [_short(r, line) for r, line in zip(runs, labels)])
     S = [r["summary"] for r in runs]
 
     out = [f"# {title}\n"]
@@ -136,8 +309,19 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     scored = agentic and all(s.get("agent_score") is not None for s in S)
     out.append("## Results\n")
     # rank agentic runs on the agent score; solve rate ties too often to rank on
-    best = max(range(len(S)),
-               key=lambda i: (S[i]["agent_score"] if scored else S[i]["pass_at_1"]))
+    if setups:
+        # A sweep spans several harnesses and both thinking modes, so a single
+        # bolded row would be a cross-harness verdict printed directly above the
+        # section explaining that no such verdict exists. Bold each comparable
+        # block's leader instead.
+        leaders = set()
+        for idx in _blocks(runs).values():
+            key = _block_key(S, idx)
+            leaders.add(max(idx, key=lambda i, key=key: (S[i].get(key) or 0)))
+    else:
+        leaders = {max(range(len(S)),
+                       key=lambda i: (S[i]["agent_score"] if scored
+                                      else S[i]["pass_at_1"]))}
     if scored:
         out.append("| Run | Agent score | Solved | Efficiency | Mean calls | Par "
                    "| Valid calls | Turn-limit | Wall |\n"
@@ -151,9 +335,9 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
                    "| Truncated | tok/s |\n|---|---|---|---|---|---|---|---|---|")
     for i, s in enumerate(S):
         d = s["by_difficulty"]
-        name = f"**{labels[i]}**" if i == best else labels[i]
+        name = f"**{labels[i]}**" if i in leaders else labels[i]
         if scored:
-            score = (f"**{s['agent_score'] * 100:.1f}**" if i == best
+            score = (f"**{s['agent_score'] * 100:.1f}**" if i in leaders
                      else f"{s['agent_score'] * 100:.1f}")
             out.append(f"| {name} | {score} "
                        f"| {_fmt(s['pass_at_1'], pct=True)} "
@@ -187,6 +371,13 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
         out.append("<sub>*Valid calls* = tool calls that did not error. *Turn-limit* = runs "
                    "abandoned after exhausting the turn budget without finishing.</sub>\n")
 
+    if setups:
+        out.append("<sub>Bold marks the leader **within** its own harness and thinking "
+                   "mode — see *Ranked setups* below for the verdict. Rows from "
+                   "different harnesses are not comparable, and neither are the "
+                   "charts that follow.</sub>\n")
+        out.append(rank_setups(runs, labels))
+
     # --- charts ---
     out.append(_chart("Solve rate (%)" if agentic else "pass@1 (%)",
                       "solved %" if agentic else "pass@1 %", short,
@@ -218,8 +409,16 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     out.append("<sub>" + " · ".join(f"Line {i+1} = {line}" for i, line in enumerate(labels)) + "</sub>\n")
 
     # --- per-task disagreement between best and runner-up ---
-    if len(S) >= 2:
-        order = sorted(range(len(S)), key=lambda i: -S[i]["pass_at_1"])[:2]
+    # A head-to-head across harnesses or thinking modes is the cross-block
+    # comparison the ranking exists to forbid, so in a sweep the pair must come
+    # from one block -- and if no block holds two runs, there is no pair.
+    pool = range(len(S))
+    if setups:
+        candidates = [idx for idx in _blocks(runs).values() if len(idx) >= 2]
+        pool = max(candidates,
+                   key=lambda idx: max(S[i]["pass_at_1"] for i in idx)) if candidates else []
+    if len(pool) >= 2:
+        order = sorted(pool, key=lambda i: -S[i]["pass_at_1"])[:2]
         a, b = order
         ta, tb = S[a]["by_task"], S[b]["by_task"]
         rows = [(t, ta[t], tb.get(t, 0.0)) for t in sorted(ta) if ta[t] != tb.get(t, 0.0)]

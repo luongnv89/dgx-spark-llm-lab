@@ -8,6 +8,7 @@ pip install -r requirements.txt          # openai>=1.40
 ./bench validate --suite agentic-all      # 16/16
 ./bench run --suite all --label "..."     # full evaluation
 ./bench compare <A> <B> --both-modes      # head-to-head
+./bench sweep --setup config=<c>,thinking=both --dry-run   # rank whole setups
 ./bench harness models                    # models your opencode/pi can reach
 ./bench harness run --harness opencode -m <p>/<m>   # benchmark one of them
 ./bench apply <config> --restart          # install winner
@@ -20,7 +21,7 @@ pip install -r requirements.txt          # openai>=1.40
 
 ## Environment variables
 
-All `BENCH_*` vars read by `benchkit/runner.py:Config.from_env()`:
+All `BENCH_*` vars read by `benchkit/runner.py:Config.from_env()`; full list with comments in `.env.example`:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -35,15 +36,13 @@ All `BENCH_*` vars read by `benchkit/runner.py:Config.from_env()`:
 | `BENCH_HARNESS_ENDPOINT` | — | Point a harness at this endpoint, not its own providers |
 | `PI_CODING_AGENT_DIR` | — | pi agent directory |
 
-Full list with comments: `.env.example`.
-
 ## Architecture map
 
 ```
 ./
 ├── bench                # CLI entry point
 ├── benchkit/
-│   ├── cli.py           # validate, run, compare, report, harness, apply
+│   ├── cli.py           # validate, run, compare, sweep, report, harness, apply
 │   ├── runner.py        # Config + suite runner
 │   ├── suites/          # one-shot task definitions
 │   ├── agentic/         # agentic tasks + oracles
@@ -58,7 +57,7 @@ Full list with comments: `.env.example`.
 
 - **Never edit a task's tests, asserts or `check` to make a model pass.** That destroys the benchmark.
 - **Never delete or overwrite `results/`.** It is append-only.
-- **Never restart a shared serving endpoint without explicit human approval.**
+- **Never restart a shared serving endpoint without explicit human approval.** `bench sweep` refuses without `--yes-restart-endpoint` or an interactive yes.
 - **Always run both thinking modes** (`--thinking` and without). They are different products.
 - **Raise `--max-tokens` with `--thinking`** or reasoning eats the entire budget.
 - **Differences under ~8 points at `--samples 2` are noise.** Say so; raise `--samples`.

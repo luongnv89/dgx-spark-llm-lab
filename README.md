@@ -109,12 +109,57 @@ program runs in a subprocess. It passes or it does not.
 | `./bench configs` | List known-good serving configs |
 | `./bench apply <name> [--restart]` | Install one as your live server config |
 | `./bench compare <model>...` | DGX box only: swap, run, restore, report — one command |
+| `./bench sweep --setup ...` | DGX box only: sweep serving config x harness x thinking mode and rank the *setups* |
 
 Full walkthrough: **[docs/REPRODUCING.md](docs/REPRODUCING.md)**.
 Running this as an AI agent: **[AGENTS.md](AGENTS.md)** — a runbook with checks and guardrails.
 Benchmarking through your own coding agent: **[docs/HARNESSES.md](docs/HARNESSES.md)**.
 Where this is going: **[ROADMAP.md](ROADMAP.md)** — next up is benchmarking through the
 coding harness you actually use (pi, opencode, Claude Code, Codex), not just our tool loop.
+
+## Sweeping setups, not just models
+
+A setup on your machine is three things at once: the serving config, the harness wrapped
+around the model, and whether thinking is on. `bench compare` sweeps only the model.
+`bench sweep` takes an explicit matrix of setups and ranks them:
+
+```bash
+./bench sweep --suite agentic-hard --title "27B dense vs 35B MoE" \
+  --setup config=qwen3.6-35b-a3b-nvfp4,thinking=both \
+  --setup config=qwen3.8-27b-nvfp4-dspark,thinking=both \
+  --setup config=qwen3.6-35b-a3b-nvfp4,harness=opencode,model=montimage-dgx-spark \
+  --dry-run
+```
+
+Four things worth knowing before you drop the `--dry-run`:
+
+- **The matrix is explicit, never a cross-product.** Independent `--configs`/`--harnesses`
+  flags would multiply into combinations that cannot exist. Each `--setup` is one real
+  combination; `thinking=both` is the only expansion, because thinking and non-thinking are
+  two products, not one row.
+- **One restart per serving config, not per setup.** Setups are grouped by config, so a
+  six-setup sweep over two configs restarts the endpoint twice.
+- **Every restart is gated.** Without `--yes-restart-endpoint` a sweep that would restart a
+  shared endpoint asks first, and refuses outright when it cannot ask. Dropping `config=`
+  from every setup sweeps the harness and thinking axes against whatever is already serving,
+  and never touches the launcher. There is deliberately no "swap but do not restart" mode:
+  it would measure the previous config and file the result under the new one's name.
+- **The launcher you started with is put back** — on success and on failure, and a failing
+  restore is reported rather than allowed to bury the error that caused it.
+
+The report ranks setups *within* one harness and one thinking mode and nowhere else: the
+same weights score 67.4 through the built-in loop and 79.3 through opencode here, so a
+single cross-harness "winner" would be reporting the harness. Each block names its own
+winner and says whether the margin clears the noise floor for the sample count used (~8
+points at `--samples 2`, scaled by 1/sqrt(n) above that).
+
+The ranking is rebuildable from the result files alone — `./bench report <dir>/*.json
+--setups` regenerates it without re-running anything, so a sweep that finished but tripped
+over its report is not lost.
+
+Not every recipe in `configs/` can be swept — `bench configs` marks the ones that cannot and
+says why (a llama.cpp script, a standalone tunable server, a secondary backend on its own
+unit are all fine recipes, just not drivable by the `vllm-qwen` systemd machinery).
 
 ## The suites
 

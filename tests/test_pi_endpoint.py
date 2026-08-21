@@ -220,6 +220,14 @@ class TestEndpointAvailability(PiEndpointCase):
 
     def setUp(self):
         super().setUp()
+        # The endpoint branch sits behind pi's own `--version` probe, so on a
+        # machine without pi installed (CI) every assertion below would only be
+        # measuring `pi not found on PATH`. Stub the probe so these tests test
+        # what they claim to: the endpoint logic.
+        from benchkit.harness import pi as pi_mod
+        original = pi_mod.PiHarness._version
+        pi_mod.PiHarness._version = lambda self: ("stub", None)
+        self.addCleanup(setattr, pi_mod.PiHarness, "_version", original)
         self.server = HTTPServer(("127.0.0.1", 0), _ModelsHandler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.server_close)
