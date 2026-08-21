@@ -187,9 +187,13 @@ def plan(setups, default_model=""):
     lines = []
     groups = group_by_config(setups)
     swaps = [c for c, _ in groups if c]
+    restarts = f"{_n(len(swaps), 'endpoint restart')}"
+    if swaps:
+        restarts += (f", plus one more to restore the original serving config"
+                     f" — {len(swaps) + 1} in total")
     lines.append(f"{_n(len(setups), 'setup')} in "
                  f"{_n(len(groups), 'serving-config group')} "
-                 f"({_n(len(swaps), 'endpoint restart')})")
+                 f"({restarts})")
     for cname, group in groups:
         lines.append(f"\n  serving config: {cname or '(active launcher, no swap)'}")
         for s in group:
@@ -217,6 +221,10 @@ def approve_restart(configs, assume_yes=False, stdin=None, stdout=None, log=prin
     approval*. Default is to refuse -- a non-interactive sweep that was not
     given `--yes-restart-endpoint` stops before it writes a single byte to the
     launcher, rather than treating silence as consent.
+
+    The number quoted to the operator is the *true* total: one restart per
+    distinct config to install it, plus one final restart to put the original
+    serving config back (see `_restore`) -- `len(configs) + 1`.
     """
     import sys
     if not configs:
@@ -229,15 +237,19 @@ def approve_restart(configs, assume_yes=False, stdin=None, stdout=None, log=prin
     stdout = sys.stdout if stdout is None else stdout
     if not (hasattr(stdin, "isatty") and stdin.isatty()):
         raise SystemExit(
-            f"this sweep would restart the shared serving endpoint {len(configs)} "
-            f"time(s) to install: {plan_txt}\n"
+            f"this sweep would restart the shared serving endpoint "
+            f"{len(configs) + 1} time(s): {len(configs)} to install "
+            f"{plan_txt}, and one more to restore the original serving config "
+            f"afterwards.\n"
             "Restarting a shared endpoint needs explicit human approval, and this "
             "session is not interactive.\n"
             "Re-run with --yes-restart-endpoint once the endpoint is genuinely "
             "yours to restart, or drop config= from every --setup to sweep only "
             "the harness and thinking axes against whatever is already serving.")
-    print(f"\nThis sweep will restart the shared serving endpoint {len(configs)} "
-          f"time(s), installing: {plan_txt}", file=stdout)
+    print(f"\nThis sweep will restart the shared serving endpoint "
+          f"{len(configs) + 1} time(s): {len(configs)} to install {plan_txt}, "
+          f"and one more to restore the original serving config afterwards.",
+          file=stdout)
     print("Anyone else using the endpoint will lose it for several minutes per "
           "restart.", file=stdout)
     print(f"Type {APPROVAL_WORD!r} to approve, anything else to abort: ",
@@ -293,6 +305,9 @@ def _restore(snapshot, serving, restart, log, swallow):
 def run_sweep(setups, outdir, execute, serving, assume_yes=False, restart=True,
               stdin=None, stdout=None, log=print, default_model=""):
     """Execute every setup, one endpoint restart per distinct serving config.
+
+    Plus one final restart to reinstate the original serving config, so a sweep
+    over N distinct configs costs the shared endpoint N+1 restarts.
 
     `execute(setup, label)` runs one row and returns `(summary, results)`; the
     caller owns how a row is run so this function stays testable without an

@@ -170,6 +170,15 @@ class ApprovalGate(unittest.TestCase):
                                   stdin=io.StringIO(""), stdout=io.StringIO())
         self.assertIn("--yes-restart-endpoint", str(e.exception))
 
+    def test_refusal_counts_the_restore_restart_too(self):
+        """Two configs cost three restarts — the gate must not quote two."""
+        with self.assertRaises(SystemExit) as e:
+            sweep.approve_restart(["cfg-a", "cfg-b"], assume_yes=False,
+                                  stdin=io.StringIO(""), stdout=io.StringIO())
+        msg = str(e.exception)
+        self.assertIn("3 time(s)", msg)
+        self.assertIn("restore the original serving config", msg)
+
     def test_explicit_flag_approves(self):
         self.assertTrue(sweep.approve_restart(["cfg-a"], assume_yes=True,
                                               log=lambda *a: None))
