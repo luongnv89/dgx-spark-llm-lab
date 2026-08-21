@@ -22,14 +22,14 @@ points, not gospel.
 
 ## The recipes
 
-| Config | Model | Quant | VRAM budget | Measured | Use it when |
-|---|---|---|---|---|---|
-| `qwen3.6-35b-a3b-nvfp4` | Qwen3.6-35B-A3B | NVFP4 | 0.62 (~74 GB) | **82.1 % pass@1**, **100 % agentic**, 47.8 tok/s | **Current winner.** Best accuracy/latency mix for coding agents |
-| `ornith-1.5-35b-a3b-nvfp4` | Ornith-1.5-35B-A3B | NVFP4 | 0.62 (~74 GB) | 80.4 % pass@1, 38.9 tok/s | Runner-up. Fewer output tokens per answer, but it collapses without its reasoning block |
-| `qwen3.8-27b-nvfp4-dspark` | Qwen3.8-27B (dense) | NVFP4 | 0.70 | 96.9 % on core16 only | Dense-model comparison; much slower TTFT for agent loops |
-| `qwen3.8-27b-nvfp4-tunable` | Qwen3.8-27B (dense) | NVFP4 | env-tunable | — | Sweeping speculative-decoding settings (`K`, `DRAFTER`, `SPEC`) |
-| `gemma4-12b-w4a16` | Gemma 4 12B | QAT W4A16 | 0.16 | — | Small secondary backend alongside the primary, on port 8802 |
-| `llamacpp-qwen3.8-27b-bench.sh` | Qwen3.8-27B GGUF | Q4_K_M | — | ~11.6 tok/s | llama.cpp comparison, not a vLLM recipe |
+| Config | Model | Quant | VRAM budget | Image digest | Measured | Use it when |
+|---|---|---|---|---|---|---|
+| `qwen3.6-35b-a3b-nvfp4` | Qwen3.6-35B-A3B | NVFP4 | 0.62 (~74 GB) | `@sha256:1962734…` | **82.1 % pass@1**, **100 % agentic**, 47.8 tok/s | **Current winner.** Best accuracy/latency mix for coding agents |
+| `ornith-1.5-35b-a3b-nvfp4` | Ornith-1.5-35B-A3B | NVFP4 | 0.62 (~74 GB) | `@sha256:1962734…` | 80.4 % pass@1, 38.9 tok/s | Runner-up. Fewer output tokens per answer, but it collapses without its reasoning block |
+| `qwen3.8-27b-nvfp4-dspark` | Qwen3.8-27B (dense) | NVFP4 | 0.70 | `v0.27.1-aarch64` | 96.9 % on core16 only | Dense-model comparison; much slower TTFT for agent loops |
+| `qwen3.8-27b-nvfp4-tunable` | Qwen3.8-27B (dense) | NVFP4 | env-tunable | — | — | Sweeping speculative-decoding settings (`K`, `DRAFTER`, `SPEC`) |
+| `gemma4-12b-w4a16` | Gemma 4 12B | QAT W4A16 | 0.16 | built from `@sha256:1962734…` | — | Small secondary backend alongside the primary, on port 8802 |
+| `llamacpp-qwen3.8-27b-bench.sh` | Qwen3.8-27B GGUF | Q4_K_M | — | ~11.6 tok/s | — | llama.cpp comparison, not a vLLM recipe |
 
 "Measured" links to the campaign in [`../results/`](../results/) that produced it.
 Where a cell is blank, that config has not been put through the coding suite.
