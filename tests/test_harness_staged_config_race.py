@@ -22,19 +22,27 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import HarnessConfig, get  # noqa: E402
-from benchkit.harness.claudecode import CONFIG_DIR as CLAUDE_HOME  # noqa: E402
-from benchkit.harness.opencode import CONFIG_NAME  # noqa: E402
+from benchkit.harness import HarnessConfig, HarnessResult, get
+from benchkit.harness.claudecode import CONFIG_DIR as CLAUDE_HOME
+from benchkit.harness.opencode import CONFIG_NAME
 
 ENDPOINT = "http://localhost:8001/v1"
 
 TASKS = 8
 
 
-class _FakeProcess:
-    stdout = ""
-    stderr = ""
-    returncode = 0
+# The adapters spawn through stream_events(), not subprocess.run(): af32cbe
+# moved them to Popen so task logs stream instead of buffering. Patching
+# subprocess.run here caught nothing and let the real `opencode`/`claude`
+# binaries run, so patch the seam the adapters actually call. It takes
+# (argv, cwd=, env=, handler=, timeout=, label=) and returns
+# (HarnessResult, returncode, stderr_tail).
+OPENCODE_SPAWN = "benchkit.harness.opencode.stream_events"
+CLAUDECODE_SPAWN = "benchkit.harness.claudecode.stream_events"
+
+
+def fake_spawn(*_argv, **_kw):
+    return HarnessResult(stop_reason="done"), 0, ""
 
 
 class StagedPathCase(unittest.TestCase):
@@ -57,6 +65,8 @@ class StagedPathCase(unittest.TestCase):
 
 
 class TestOpenCodeStaging(StagedPathCase):
+    SPAWN = OPENCODE_SPAWN
+
     def harness(self):
         return get("opencode", HarnessConfig(model="m", base_url=ENDPOINT))
 
@@ -66,7 +76,7 @@ class TestOpenCodeStaging(StagedPathCase):
         w1 = h.prepare(first)
         w2 = h.prepare(second)
         seen = {}
-        with mock.patch("subprocess.run", return_value=_FakeProcess()) as run:
+        with mock.patch(self.SPAWN, side_effect=fake_spawn) as run:
             h.run(w1, "p")
             h.run(w2, "p")
             seen[w1] = run.call_args_list[0].kwargs["env"]["OPENCODE_CONFIG"]
@@ -93,10 +103,10 @@ class TestOpenCodeStaging(StagedPathCase):
             barrier.wait(timeout=30)
             with lock:
                 handed[kw["cwd"]] = kw["env"].get("OPENCODE_CONFIG")
-            return _FakeProcess()
+            return HarnessResult(stop_reason="done"), 0, ""
 
         before = dict(vars(h))
-        with mock.patch("subprocess.run", side_effect=fake_run):
+        with mock.patch(self.SPAWN, side_effect=fake_run):
             with ThreadPoolExecutor(max_workers=TASKS) as ex:
                 list(ex.map(lambda w: h.run(w, "p"), workdirs))
 
@@ -126,9 +136,12 @@ class TestOpenCodeStaging(StagedPathCase):
         container, = self.containers(1)
         workdir = h.prepare(container)
         shutil.rmtree(container)
-        with mock.patch("subprocess.run",
-                        side_effect=AssertionError("must not be invoked")):
+        # run() catches every exception from the spawn and turns it into an
+        # error result, so a raising double would be swallowed and prove
+        # nothing. Assert the spawn was never reached at all.
+        with mock.patch(self.SPAWN, side_effect=fake_spawn) as run:
             h.run(workdir, "p")
+        run.assert_not_called()
 
     def test_without_an_endpoint_nothing_is_redirected(self):
         h = get("opencode", HarnessConfig(provider="ollama", model="m"))
@@ -137,13 +150,15 @@ class TestOpenCodeStaging(StagedPathCase):
         self.assertFalse(os.path.exists(self.staged_path(workdir, CONFIG_NAME)),
                          "endpoint-less runs must stage no config")
         seen = {}
-        with mock.patch("subprocess.run", return_value=_FakeProcess()) as run:
+        with mock.patch(self.SPAWN, side_effect=fake_spawn) as run:
             h.run(workdir, "p")
             seen["env"] = run.call_args.kwargs["env"]
         self.assertNotIn("OPENCODE_CONFIG", seen["env"])
 
 
 class TestClaudeCodeStaging(StagedPathCase):
+    SPAWN = CLAUDECODE_SPAWN
+
     def harness(self):
         return get("claude-code", HarnessConfig(model="sonnet",
                                                 base_url=ENDPOINT))
@@ -168,9 +183,9 @@ class TestClaudeCodeStaging(StagedPathCase):
             barrier.wait(timeout=30)
             with lock:
                 handed[kw["cwd"]] = kw["env"].get("CLAUDE_CONFIG_DIR")
-            return _FakeProcess()
+            return HarnessResult(stop_reason="done"), 0, ""
 
-        with mock.patch("subprocess.run", side_effect=fake_run):
+        with mock.patch(self.SPAWN, side_effect=fake_run):
             with ThreadPoolExecutor(max_workers=TASKS) as ex:
                 list(ex.map(lambda w: h.run(w, "p"), workdirs))
 
@@ -186,7 +201,7 @@ class TestClaudeCodeStaging(StagedPathCase):
         container, = self.containers(1)
         workdir = h.prepare(container)
         seen = {}
-        with mock.patch("subprocess.run", return_value=_FakeProcess()) as run:
+        with mock.patch(self.SPAWN, side_effect=fake_spawn) as run:
             h.run(workdir, "p")
             seen["env"] = run.call_args.kwargs["env"]
         self.assertNotIn("CLAUDE_CONFIG_DIR", seen["env"])

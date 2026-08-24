@@ -8,9 +8,9 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
-from benchkit import runner, report  # noqa: E402
-from benchkit.references import REFERENCES  # noqa: E402
-from benchkit.suites import SUITES, DESCRIPTIONS, get, kind  # noqa: E402
+from benchkit import report, runner
+from benchkit.references import REFERENCES
+from benchkit.suites import DESCRIPTIONS, SUITES, get, kind
 
 RESULTS = os.path.join(HERE, "results")
 
@@ -294,7 +294,8 @@ def cmd_sweep(args):
     distinct serving config, behind the shared-endpoint approval gate, and with
     the launcher that was active when the sweep began put back on the way out.
     """
-    from benchkit import serving, sweep as S
+    from benchkit import serving
+    from benchkit import sweep as S
 
     setups = S.parse_setups(args.setups, known_harnesses=_harness_names(),
                             default_model=args.model)

@@ -53,14 +53,26 @@ docker rm -f "${NAME}" >/dev/null 2>&1 || true
 # path), so it sits directly in the decode path.
 # VLLM_USE_FLASHINFER_MOE_FP4=0 keeps the MoE path off CUTLASS FP4, reported to
 # emit silent garbage on this architecture. Unused by this dense model.
+# Why some flags below are required. Keep these notes here: an inline `#`
+# comment on a \-continued line swallows the backslash and truncates the
+# command (that is how the IMAGE argument went missing and the unit crash-looped).
+#   --network host       required: vLLM needs host networking for GPU direct
+#   --cap-add=IPC_LOCK   required: CUDA IPC lock for multi-GPU communication
+#   --ipc host           required: vLLM uses shared memory for tensor parallelism
+#   --limit-mm-per-prompt '{"image":0}'
+#       multimodal disabled (#24, F-SEC-002): image:0 rejects media at the
+#       request boundary, so no URL is ever fetched. `--allowed-media-domains ""`
+#       cannot do this -- vLLM parses the empty string as [None] and refuses to
+#       start. To re-enable vision, set image:N and add --allowed-media-domains
+#       with an explicit host allowlist (the default allows every domain).
 exec docker run --rm \
   --name "${NAME}" \
   --user 1000:1000 \
-  --network host   # required: vLLM needs host networking for GPU direct \
+  --network host \
   --shm-size=32g \
   --ulimit memlock=-1:-1 \
-  --cap-add=IPC_LOCK   # required: CUDA IPC lock for multi-GPU communication \
-  --ipc host   # required: vLLM uses shared memory for tensor parallelism \
+  --cap-add=IPC_LOCK \
+  --ipc host \
   --gpus all \
   --entrypoint /usr/local/bin/vllm \
   -e VLLM_MARLIN_USE_ATOMIC_ADD=1 \
@@ -85,6 +97,5 @@ exec docker run --rm \
     --default-chat-template-kwargs '{"enable_thinking":false,"preserve_thinking":true}' \
     --tool-call-parser qwen3_xml \
     --enable-auto-tool-choice \
-    --limit-mm-per-prompt '{"image":4}' \
-    --allowed-media-domains "" \
+    --limit-mm-per-prompt '{"image":0}' \
     --override-generation-config '{"temperature":0.6,"top_p":0.95,"top_k":20,"min_p":0.0}'

@@ -12,8 +12,7 @@ from unittest import mock
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(
     __import__("os").path.abspath(__file__))))
 
-from benchkit.agentic import loop  # noqa: E402
-
+from benchkit.agentic import loop
 
 # ---------------------------------------------------------------------------
 # Fixtures

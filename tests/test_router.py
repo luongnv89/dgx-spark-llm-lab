@@ -27,10 +27,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aiohttp import web  # noqa: E402
-from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
+from aiohttp import web
+from aiohttp.test_utils import TestClient, TestServer
 
-import router  # noqa: E402
+import router
 
 
 class TestDefaultListenHost(unittest.TestCase):

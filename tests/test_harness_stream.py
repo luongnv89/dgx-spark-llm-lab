@@ -21,15 +21,18 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import HarnessConfig  # noqa: E402
-from benchkit.harness.claudecode import (  # noqa: E402
-    _claudecode_finalize, _claudecode_handler, parse_events as parse_claude)
-from benchkit.harness.opencode import (  # noqa: E402
-    OpenCodeHarness, _opencode_handler, parse_events as parse_opencode)
-from benchkit.harness.pi import (  # noqa: E402
-    PiHarness, _pi_handler, parse_events as parse_pi)
-from benchkit.harness.stream import RAW_TAIL_CHARS, StreamTimeout  # noqa: E402
-from benchkit.harness.stream import stream_events  # noqa: E402
+from benchkit.harness import HarnessConfig
+from benchkit.harness.claudecode import _claudecode_finalize, _claudecode_handler
+from benchkit.harness.claudecode import parse_events as parse_claude
+from benchkit.harness.opencode import OpenCodeHarness, _opencode_handler
+from benchkit.harness.opencode import parse_events as parse_opencode
+from benchkit.harness.pi import PiHarness, _pi_handler
+from benchkit.harness.pi import parse_events as parse_pi
+from benchkit.harness.stream import (
+    RAW_TAIL_CHARS,
+    StreamTimeout,
+    stream_events,
+)
 
 PY = sys.executable
 

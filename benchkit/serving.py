@@ -17,8 +17,8 @@ CONFIGS = os.path.join(HERE, "configs")
 LAUNCHER = os.path.join(HERE, "start-qwen.sh")
 UNIT = "vllm-qwen"
 HEALTH_URL = "http://127.0.0.1:8801/v1/models"
-MODEL_RE = re.compile(r'^MODEL_ID="([^"]+)"', re.M)
-UNIT_RE = re.compile(r'^NAME="([^"$]+)"', re.M)
+MODEL_RE = re.compile(r'^MODEL_ID="([^"]+)"', re.MULTILINE)
+UNIT_RE = re.compile(r'^NAME="([^"$]+)"', re.MULTILINE)
 
 
 def _atomic_write(path: str, content: str) -> None:

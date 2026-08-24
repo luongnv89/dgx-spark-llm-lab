@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 
 SYSTEM = (
     "You are an expert Python programmer. Answer with a single self-contained "
@@ -19,7 +19,7 @@ SYSTEM = (
     "it needs. No explanation, no tests, no example usage."
 )
 
-CODE_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.S)
+CODE_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL)
 
 
 @dataclass
@@ -107,7 +107,7 @@ def _run_isolated(prog, timeout):
     try:
         proc = subprocess.run(
             ["unshare", "--net", "--mount", sys.executable, "-c",
-             f"exec {sys.executable} -c {repr(prog)}"],
+             f"exec {sys.executable} -c {prog!r}"],
             capture_output=True, text=True, timeout=timeout,
         )
         ok = proc.returncode == 0 and "PASS" in proc.stdout
