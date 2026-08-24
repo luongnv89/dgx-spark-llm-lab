@@ -148,7 +148,7 @@ class TestClaudeCodeStaging(StagedPathCase):
         return get("claude-code", HarnessConfig(model="sonnet",
                                                 base_url=ENDPOINT))
 
-    def test_prepare_makes_the_config_home_but_remember_nothing(self):
+    def test_prepare_makes_the_config_home_but_remembers_nothing(self):
         h = self.harness()
         before = dict(vars(h))
         workdir = h.prepare(self.containers(1)[0])
