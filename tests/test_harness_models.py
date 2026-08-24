@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import HARNESSES, HarnessConfig, get, models  # noqa: E402
+from benchkit.harness import HARNESSES, HarnessConfig, get, models
 
 CATALOGUE = [
     ("anthropic", "claude-sonnet-4-5"),

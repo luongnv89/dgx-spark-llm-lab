@@ -2,14 +2,25 @@
 
 See benchkit/harness/base.py for why this exists and ROADMAP.md for what is next.
 """
-__all__ = ["Harness", "HarnessConfig", "HarnessResult", "run_task", "PiHarness",
-           "OpenCodeHarness", "ClaudeCodeHarness", "HARNESSES", "get"]
+__all__ = [
+    "HARNESSES",
+    "ClaudeCodeHarness",
+    "Harness",
+    "HarnessConfig",
+    "HarnessResult",
+    "OpenCodeHarness",
+    "PiHarness",
+    "get",
+    "run_task",
+]
 
-from .base import (Harness as Harness, HarnessConfig as HarnessConfig,
-                   HarnessResult as HarnessResult, run_task as run_task)
-from .pi import PiHarness
-from .opencode import OpenCodeHarness
+from .base import Harness as Harness
+from .base import HarnessConfig as HarnessConfig
+from .base import HarnessResult as HarnessResult
+from .base import run_task as run_task
 from .claudecode import ClaudeCodeHarness
+from .opencode import OpenCodeHarness
+from .pi import PiHarness
 
 HARNESSES = {"pi": PiHarness, "opencode": OpenCodeHarness,
               "claude-code": ClaudeCodeHarness}

@@ -12,7 +12,7 @@ import time
 
 from ..runner import _summarize_common
 from .env import Workspace, _no_tool_calls, call
-from .tools import TOOLS, SYSTEM
+from .tools import SYSTEM, TOOLS
 
 MAX_TURNS = 25
 

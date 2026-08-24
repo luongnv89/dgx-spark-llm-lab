@@ -4,10 +4,10 @@
 raise on failure. Every task has a reference solution in benchkit.references,
 so `bench validate` can prove the tests are passable before blaming a model.
 """
-from .core16 import TASKS as CORE16
-from .hard12 import TASKS as HARD12
 from ..agentic.tasks import TASKS as AGENTIC
 from ..agentic.tasks_hard import TASKS as AGENTIC_HARD
+from .core16 import TASKS as CORE16
+from .hard12 import TASKS as HARD12
 
 SUITES = {
     "core16": CORE16,

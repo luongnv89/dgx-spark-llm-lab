@@ -22,9 +22,9 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import HarnessConfig, HarnessResult, get  # noqa: E402
-from benchkit.harness.claudecode import CONFIG_DIR as CLAUDE_HOME  # noqa: E402
-from benchkit.harness.opencode import CONFIG_NAME  # noqa: E402
+from benchkit.harness import HarnessConfig, HarnessResult, get
+from benchkit.harness.claudecode import CONFIG_DIR as CLAUDE_HOME
+from benchkit.harness.opencode import CONFIG_NAME
 
 ENDPOINT = "http://localhost:8001/v1"
 

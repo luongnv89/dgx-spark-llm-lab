@@ -16,8 +16,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit.harness import HarnessConfig, get  # noqa: E402
-from benchkit.harness.pi import (  # noqa: E402
+from benchkit.harness import HarnessConfig, get
+from benchkit.harness.pi import (
     CATALOGUE_NAME,
     DEFAULT_ENDPOINT_PROVIDER,
     STAGED_AGENT_DIR,
@@ -199,7 +199,7 @@ class _ModelsHandler(BaseHTTPRequestHandler):
 
     served = ["served-model"]
 
-    def do_GET(self):  # noqa: N802 — BaseHTTPRequestHandler's name
+    def do_GET(self):
         body = json.dumps({"data": [{"id": i} for i in self.served]}).encode()
         self.send_response(200)
         self.send_header("content-type", "application/json")

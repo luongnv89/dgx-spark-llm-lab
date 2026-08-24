@@ -16,8 +16,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from benchkit import report, sweep  # noqa: E402
-from benchkit import serving as real_serving  # noqa: E402
+from benchkit import report, sweep
+from benchkit import serving as real_serving
 
 SUMMARY = dict(
     kind="agentic", pass_at_1=0.5, agent_score=0.4, mean_efficiency=0.8,

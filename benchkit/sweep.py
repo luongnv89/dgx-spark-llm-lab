@@ -292,7 +292,7 @@ def _restore(snapshot, serving, restart, log, swallow):
         if restore_launcher(snapshot, serving) and restart:
             log("restarting the endpoint on the original serving config...")
             serving.restart()
-    except BaseException as exc:  # noqa: BLE001 — see docstring
+    except BaseException as exc:
         if not swallow:
             raise
         log(f"WARNING: could not restore the original serving config: {exc!r}")
