@@ -18,6 +18,43 @@ Usage::
 import json
 
 
+def new_result():
+    """A fresh HarnessResult; the raw log tail is filled in by the caller."""
+    from .base import HarnessResult
+    return HarnessResult()
+
+
+def fold_line(line, res, state, handler):
+    """Fold one raw stream line into *res* via *handler*.
+
+    Returns True when the line carried a parsed event. Lines that are blank or
+    not a JSON object are silently skipped. Shared by the whole-string parser
+    below and the streaming runner in `stream.py`, so the two paths cannot
+    drift apart.
+    """
+    line = line.strip()
+    if not line or not line.startswith("{"):
+        return False
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        return False
+    handler(ev, res, state)
+    return True
+
+
+def finish(res, state, finalize=None):
+    """Apply *finalize* and the default stop_reason once the stream has ended.
+
+    The default must run after *finalize*: a fallback that fills in *turns*
+    still feeds that default.
+    """
+    if finalize is not None:
+        finalize(res, state)
+    if res.stop_reason == "unknown" and res.turns:
+        res.stop_reason = "finished"
+
+
 def parse_events(stdout, handler, finalize=None):
     """Fold a JSONL event stream into a HarnessResult using *handler*.
 
@@ -35,18 +72,8 @@ def parse_events(stdout, handler, finalize=None):
     res = _make_result(stdout)
     _state = {}
     for line in stdout.splitlines():
-        line = line.strip()
-        if not line or not line.startswith("{"):
-            continue
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        handler(ev, res, _state)
-    if finalize is not None:
-        finalize(res, _state)
-    if res.stop_reason == "unknown" and res.turns:
-        res.stop_reason = "finished"
+        fold_line(line, res, _state, handler)
+    finish(res, _state, finalize)
     return res
 
 

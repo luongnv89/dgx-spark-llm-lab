@@ -64,6 +64,7 @@ import urllib.request
 
 from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
+from .stream import StreamTimeout, stream_events
 
 THINKING_LEVELS = {False: "off", True: "high"}
 
@@ -344,23 +345,19 @@ class PiHarness(Harness):
         agent_dir = self._staged_dir(workdir) if self.uses_endpoint else None
         env = self._env(agent_dir)
         try:
-            p = subprocess.run(self._argv(prompt, thinking, agent_dir),
-                               cwd=workdir, env=env,
-                               capture_output=True, text=True, timeout=timeout,
-                               # pi blocks forever on an inherited stdin it can never
-                               # read; every task then times out with zero turns.
-                               stdin=subprocess.DEVNULL)
-        except subprocess.TimeoutExpired:
+            res, rc, err_tail = stream_events(
+                self._argv(prompt, thinking, agent_dir), cwd=workdir, env=env,
+                handler=_pi_handler, timeout=timeout, label="pi")
+        except StreamTimeout:
             return HarnessResult(stop_reason="timeout",
                                  error=f"pi exceeded {timeout}s")
         except Exception as e:  # noqa: BLE001
             return HarnessResult(stop_reason="error", error=f"{type(e).__name__}: {e}")
 
-        res = parse_events(p.stdout)
-        if p.returncode != 0 and not res.error:
+        if rc != 0 and not res.error:
             res.stop_reason = "error"
-            tail = (p.stderr or "").strip().splitlines()
-            res.error = tail[-1][:200] if tail else f"exit {p.returncode}"
+            tail = (err_tail or "").strip().splitlines()
+            res.error = tail[-1][:200] if tail else f"exit {rc}"
         return res
 
 
