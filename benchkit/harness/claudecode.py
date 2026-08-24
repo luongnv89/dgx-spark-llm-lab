@@ -90,8 +90,6 @@ CONFIG_DIR = "claude-home"
 class ClaudeCodeHarness(Harness):
     name = "claude-code"
 
-    _config_home = None
-
     def __init__(self, cfg=None, *, tools=DEFAULT_TOOLS, effort=None):
         # `provider` exists only so the shared CLI flag is accepted; Claude Code
         # has no provider concept for a custom base URL.
@@ -208,12 +206,21 @@ class ClaudeCodeHarness(Harness):
         CLAUDE_CONFIG_DIR is pointed at a sibling directory so sessions, project
         state and history never land in the workspace that gets scored, and never
         touch the user's real ~/.claude.
+
+        That sibling's path is derived from `container` and never remembered on
+        `self`: one instance serves every task, and the runner drives those
+        tasks on a thread pool, so a stored path would hand one task another
+        task's config home — shared session state between concurrent tasks, or
+        a directory that has already been cleaned up.
         """
         workdir = os.path.join(container, "work")
         os.makedirs(workdir, exist_ok=True)
-        self._config_home = os.path.join(container, CONFIG_DIR)
-        os.makedirs(self._config_home, exist_ok=True)
+        os.makedirs(self._config_home(workdir), exist_ok=True)
         return workdir
+
+    def _config_home(self, workdir):
+        """Where prepare() made this task's config home, from its workdir alone."""
+        return os.path.join(os.path.dirname(workdir), CONFIG_DIR)
 
     # --- execution ------------------------------------------------------
     def _argv(self, prompt):
@@ -248,9 +255,9 @@ class ClaudeCodeHarness(Harness):
             # A throwaway config home keeps run state out of the user's ~/.claude.
             # It cannot be used in existing-auth mode: the login lives in that
             # directory, and redirecting it would leave every task unauthenticated.
-            env["CLAUDE_CONFIG_DIR"] = (
-                getattr(self, "_config_home", None)
-                or os.path.join(os.path.dirname(workdir), CONFIG_DIR))
+            # Found from this task's workdir, never from shared state — see
+            # prepare().
+            env["CLAUDE_CONFIG_DIR"] = self._config_home(workdir)
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
         env["DISABLE_AUTOUPDATER"] = "1"
