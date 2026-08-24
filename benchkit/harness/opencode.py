@@ -36,6 +36,7 @@ import subprocess
 
 from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
+from .stream import StreamTimeout, stream_events
 
 CONFIG_NAME = "opencode.json"
 
@@ -214,20 +215,19 @@ class OpenCodeHarness(Harness):
                 os.path.join(os.path.dirname(workdir), CONFIG_NAME)
         env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
         try:
-            p = subprocess.run(self._argv(prompt, workdir), cwd=workdir, env=env,
-                               capture_output=True, text=True, timeout=timeout,
-                               stdin=subprocess.DEVNULL)
-        except subprocess.TimeoutExpired:
+            res, rc, err_tail = stream_events(
+                self._argv(prompt, workdir), cwd=workdir, env=env,
+                handler=_opencode_handler, timeout=timeout, label="opencode")
+        except StreamTimeout:
             return HarnessResult(stop_reason="timeout",
                                  error=f"opencode exceeded {timeout}s")
         except Exception as e:  # noqa: BLE001
             return HarnessResult(stop_reason="error", error=f"{type(e).__name__}: {e}")
 
-        res = parse_events(p.stdout)
-        if p.returncode != 0 and not res.error:
+        if rc != 0 and not res.error:
             res.stop_reason = "error"
-            tail = (p.stderr or "").strip().splitlines()
-            res.error = tail[-1][:200] if tail else f"exit {p.returncode}"
+            tail = (err_tail or "").strip().splitlines()
+            res.error = tail[-1][:200] if tail else f"exit {rc}"
         return res
 
 

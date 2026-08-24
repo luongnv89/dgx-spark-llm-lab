@@ -67,6 +67,7 @@ import urllib.request
 
 from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
+from .stream import StreamTimeout, stream_events
 
 #: Built-in tools the model is allowed. Deliberately excludes Task/Workflow
 #: (subagents, which can reach other models) and WebSearch/WebFetch (outside
@@ -260,23 +261,21 @@ class ClaudeCodeHarness(Harness):
         if env.get("CLAUDE_CONFIG_DIR"):
             os.makedirs(env["CLAUDE_CONFIG_DIR"], exist_ok=True)
         try:
-            p = subprocess.run(self._argv(prompt), cwd=workdir, env=env,
-                               capture_output=True, text=True, timeout=timeout,
-                               # see the pi adapter: an inherited stdin it can
-                               # never read turns every task into a zero-turn
-                               # timeout that looks like a model failure.
-                               stdin=subprocess.DEVNULL)
-        except subprocess.TimeoutExpired:
+            res, rc, err_tail = stream_events(
+                self._argv(prompt), cwd=workdir, env=env,
+                handler=_claudecode_handler, finalize=_claudecode_finalize,
+                timeout=timeout, label="claude")
+        except StreamTimeout:
             return HarnessResult(stop_reason="timeout",
                                  error=f"claude exceeded {timeout}s")
         except Exception as e:  # noqa: BLE001
             return HarnessResult(stop_reason="error", error=f"{type(e).__name__}: {e}")
 
-        res = parse_events(p.stdout)
-        if p.returncode != 0 and not res.error:
+        if rc != 0 and not res.error:
             res.stop_reason = "error"
-            tail = [line for line in (p.stderr or "").strip().splitlines() if line.strip()]
-            res.error = tail[-1][:200] if tail else f"exit {p.returncode}"
+            tail = [line for line in (err_tail or "").strip().splitlines()
+                    if line.strip()]
+            res.error = tail[-1][:200] if tail else f"exit {rc}"
         return res
 
 
