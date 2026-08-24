@@ -98,9 +98,13 @@ def stream_events(argv, *, cwd, env, handler, finalize=None, timeout=900,
             # survivor holding the stdout pipe would stall this reader until
             # it exited of its own accord.
             os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-            fired.set()
-        except (ProcessLookupError, PermissionError):
-            fired.set()
+        except ProcessLookupError:
+            # Already gone between poll and kill: finished, not timed out.
+            return
+        except OSError:
+            # Alive but unkillable: nothing more can be read, call it done.
+            pass
+        fired.set()
 
     fired = threading.Event()
     watchdog = threading.Timer(timeout, _kill)
