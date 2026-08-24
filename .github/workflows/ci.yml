@@ -22,6 +22,13 @@ jobs:
       - name: Run ruff check
         run: uv run ruff check .
 
+      # The launchers are the deployment artifact: `./bench apply` copies one
+      # into place and systemd execs it. SC2215/SC1143 catch the truncated
+      # `docker run` that took the endpoint down on 2026-08-24 (see
+      # tests/test_launcher_scripts.py). shellcheck ships on ubuntu-latest.
+      - name: Lint shell launchers (shellcheck)
+        run: shellcheck --severity=warning $(git ls-files '*.sh')
+
       - name: Run mypy
         run: uv run mypy benchkit router.py --ignore-missing-imports
 
