@@ -47,8 +47,6 @@ DEFAULT_ENDPOINT_PROVIDER = "benchkit"
 class OpenCodeHarness(Harness):
     name = "opencode"
 
-    _config_path = None
-
     def __init__(self, cfg=None, *, variant=None):
         c = cfg or HarnessConfig()
         self.base_url = c.base_url or None
@@ -163,14 +161,23 @@ class OpenCodeHarness(Harness):
         and the failure surfaced as `ProviderModelNotFoundError` a second into
         every task. An explicit path is deterministic; `--dir` then puts the
         project root back on the workspace.
+
+        Its path is derived from `container` and never remembered on `self`:
+        one instance serves every task, and the runner drives those tasks on a
+        thread pool, so a stored path would let one task's subprocess be handed
+        another task's config after that task had been cleaned up — opencode
+        then falls back to the user's own provider with no error at all.
         """
         workdir = os.path.join(container, "work")
         os.makedirs(workdir, exist_ok=True)
         if self.uses_endpoint:
-            self._config_path = os.path.join(container, CONFIG_NAME)
-            with open(self._config_path, "w") as f:
+            with open(self._staged_config(workdir), "w") as f:
                 json.dump(self._config(), f, indent=2)
         return workdir
+
+    def _staged_config(self, workdir):
+        """Where prepare() put this task's config, from its workdir alone."""
+        return os.path.join(os.path.dirname(workdir), CONFIG_NAME)
 
     def _config(self, thinking=None):
         options = {"baseURL": self.base_url}
@@ -211,8 +218,18 @@ class OpenCodeHarness(Harness):
     def run(self, workdir, prompt, timeout=900, thinking=False):
         env = dict(os.environ)
         if self.uses_endpoint:
-            env["OPENCODE_CONFIG"] = getattr(self, "_config_path", None) or \
-                os.path.join(os.path.dirname(workdir), CONFIG_NAME)
+            # Found from this task's workdir, never from shared state — see
+            # prepare().
+            cfg_path = self._staged_config(workdir)
+            if not os.path.isfile(cfg_path):
+                # A missing staged config must not look like a working run:
+                # opencode would silently fall back to the user's own config
+                # and the benchmark would measure the wrong provider.
+                return HarnessResult(
+                    stop_reason="error",
+                    error=f"no staged config at {cfg_path}; refusing to let "
+                          f"opencode fall back to your own config")
+            env["OPENCODE_CONFIG"] = cfg_path
         env["OPENCODE_DISABLE_AUTOUPDATE"] = "1"
         try:
             res, rc, err_tail = stream_events(
