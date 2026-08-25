@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="m-bench mark">
+  <!-- m-bench podium mark: incumbent bars, measured winner, benchmark cap -->
+  <path d="M10,52 V34 Q10,30 14,30 H18 Q22,30 22,34 V52 Z" fill="#A1A1A1"/>
+  <path d="M42,52 V40 Q42,36 46,36 H50 Q54,36 54,40 V52 Z" fill="#A1A1A1"/>
+  <path d="M26,52 V22 Q26,18 30,18 H34 Q38,18 38,22 V52 Z" fill="#FAFAFA"/>
+  <path d="M24,15 V12 Q24,9 27,9 H37 Q40,9 40,12 V15 Z" fill="#00FF41"/>
+</svg>

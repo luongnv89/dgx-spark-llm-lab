@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 72" role="img" aria-label="m-bench white">
+  <g transform="translate(4,4)">
+    <path d="M10,52 V34 Q10,30 14,30 H18 Q22,30 22,34 V52 Z" fill="#FFFFFF" opacity="0.55"/>
+    <path d="M42,52 V40 Q42,36 46,36 H50 Q54,36 54,40 V52 Z" fill="#FFFFFF" opacity="0.55"/>
+    <path d="M26,52 V22 Q26,18 30,18 H34 Q38,18 38,22 V52 Z" fill="#FFFFFF" opacity="0.95"/>
+    <path d="M24,15 V12 Q24,9 27,9 H37 Q40,9 40,12 V15 Z" fill="#FFFFFF" opacity="1"/>
+  </g>
+  <text x="78" y="46" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="34" letter-spacing="-0.5" fill="#FFFFFF">m-bench</text>
+</svg>
