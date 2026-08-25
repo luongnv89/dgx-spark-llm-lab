@@ -12,18 +12,23 @@
 # its own bookkeeping, and a blank field is more honest than a guessed one.
 set -uo pipefail
 
+usage() {  # usage [exit-code]
+  echo "usage: collect_context.sh [--harness <name>] [--model <spec>] [--thinking <on|off|n/a>]" >&2
+  exit "${1:-2}"
+}
+# a flag whose value is missing is a usage error, never a silent `shift 2` that
+# fails and spins the loop on the same argument forever
+need() { [ "$1" -ge 2 ] || { echo "collect_context: $2 needs a value" >&2; usage; }; }
+
 HARNESS=""; MODEL=""; THINKING=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --harness) HARNESS="${2:-}"; shift 2 ;;
-    --model) MODEL="${2:-}"; shift 2 ;;
-    --thinking) THINKING="${2:-}"; shift 2 ;;
-    -h|--help)
-      echo "usage: collect_context.sh [--harness <name>] [--model <spec>] [--thinking <on|off|n/a>]" >&2
-      exit 0 ;;
+    --harness) need $# --harness; HARNESS="$2"; shift 2 ;;
+    --model) need $# --model; MODEL="$2"; shift 2 ;;
+    --thinking) need $# --thinking; THINKING="$2"; shift 2 ;;
+    -h|--help) usage 0 ;;
     *) echo "collect_context: unknown argument '$1'" >&2
-       echo "usage: collect_context.sh [--harness <name>] [--model <spec>] [--thinking <on|off|n/a>]" >&2
-       exit 2 ;;
+       usage ;;
   esac
 done
 

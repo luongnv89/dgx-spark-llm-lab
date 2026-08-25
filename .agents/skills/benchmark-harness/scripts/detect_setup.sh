@@ -125,12 +125,16 @@ fi
 # --- 2. which model --------------------------------------------------------
 provider=""; model=""; model_source="none"
 thinking="unsupported"; thinking_source="adapter ignores --thinking for this harness"
+split=0   # has the provider already been taken off the front of $model?
 
 if [ -n "${BENCH_HARNESS_MODEL:-}" ]; then
   # the benchmark's own override, honoured by `bench` itself; outranks whatever
   # the harness happens to be set to, and is outranked only by explicit args
   model="$BENCH_HARNESS_MODEL"; model_source="env:BENCH_HARNESS_MODEL"
+  # first slash only, as benchkit/harness/models.py:_split does: the rest of the
+  # spec is the model id, slashes included (openrouter/qwen/qwen3-coder)
   case "$model" in */*) provider="${model%%/*}"; model="${model#*/}" ;; esac
+  split=1
 fi
 
 case "$harness" in
@@ -164,8 +168,12 @@ case "$harness" in
         model="$v"; model_source="file:$f"; break
       done
     fi
-    # opencode.json writes the selection as provider/model
-    case "$model" in */*) provider="${model%%/*}"; model="${model#*/}" ;; esac
+    # opencode.json writes the selection as provider/model — but only split a
+    # spec that has not been split already, or the real provider is lost
+    if [ "$split" -eq 0 ]; then
+      case "$model" in */*) provider="${model%%/*}"; model="${model#*/}" ;; esac
+      split=1
+    fi
     ;;
   pi)
     pidir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
