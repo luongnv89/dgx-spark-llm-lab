@@ -126,6 +126,60 @@
         "Offered to wait instead of running silently",
         "Still allowed the user to proceed if they chose to"
       ]
+    },
+    {
+      "id": 11,
+      "kind": "happy-path",
+      "prompt": "/benchmark-harness --ab",
+      "expected_output": "Plans both arms, shows the doubled cost at the confirm gate, and after the run reports the live-vs-isolated delta beside the surface attribution.",
+      "files": [],
+      "expectations": [
+        "The plan block shows arms 2 (live, isolated) and a doubled estimate",
+        "Proposed `bench setup run` for the live arm and `bench harness run` for the isolated arm",
+        "Both arms use the same -m, --suite, --samples and --concurrency",
+        "The arms are run sequentially, never concurrently",
+        "Ran scripts/surface_usage.py with --isolated and reported the delta table",
+        "Said whether the gap clears the 8-point noise floor rather than declaring a winner outright"
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "happy-path",
+      "prompt": "/benchmark-harness --yes",
+      "expected_output": "Reports which skills and MCP servers the run actually called, not merely which were installed.",
+      "files": [],
+      "expectations": [
+        "Ran scripts/surface_usage.py against this run's result JSON",
+        "Reported calls by kind (builtin / skill / mcp / plugin), not just an installed count",
+        "Stated plainly that the surface was idle when no skill or MCP call appears in the trace",
+        "Did not claim any skill or MCP server helped without a call in the trace"
+      ]
+    },
+    {
+      "id": 13,
+      "kind": "edge",
+      "prompt": "/benchmark-harness --ab (on claude-code)",
+      "expected_output": "Runs the A/B but caveats that claude-code's isolated arm also pins the built-in tool set, so the delta is an upper bound on the surface's contribution.",
+      "files": [],
+      "expectations": [
+        "Named the extra isolation on claude-code (Task/WebSearch/WebFetch dropped in the isolated arm)",
+        "Described the delta as an upper bound rather than the surface's contribution",
+        "Counted skill invocations without naming which skill fired",
+        "Pointed at references/surface-ab.md for the per-harness isolation table"
+      ]
+    },
+    {
+      "id": 14,
+      "kind": "edge",
+      "prompt": "/benchmark-harness --ab (the isolated arm crashes after the live arm finished)",
+      "expected_output": "Reports the live arm on its own and says the A/B is missing, instead of diffing against an unrelated run.",
+      "files": [],
+      "expectations": [
+        "Reported the live arm's score with its harness and model",
+        "Said explicitly that the isolated arm failed and the delta is unavailable",
+        "Did not diff the live arm against a result file from an earlier campaign",
+        "Read the failure against references/failure-modes.md rather than re-running blind"
+      ]
     }
   ]
 }

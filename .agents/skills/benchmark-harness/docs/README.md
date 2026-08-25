@@ -22,8 +22,14 @@
 - **Records the conditions.** Machine, GPU (and what else is using it), serving endpoint,
   and the harness's live surface — skills, MCP servers, extensions — are captured before
   the run and appended to the report, so a score stays readable months later.
+- **Tells you whether the surface earned its keep.** Every tool call is attributed to a
+  built-in, an MCP server, a skill or a plugin, so "11 skills installed, none ever called"
+  shows up as the result it is instead of hiding inside an agent score.
+- **Measures with and without.** `--ab` runs the same model and suite twice — live surface
+  on, then isolated — and diffs the two arms, so the cost of your skills and MCP servers is
+  a number rather than a hunch.
 - **Confirms before it spends.** A run is 15–40 minutes and, on a hosted model, real money,
-  so it prints the plan and waits — unless you pass `--yes`.
+  so it prints the plan and waits — unless you pass `--yes`. `--ab` doubles both.
 
 ## When to Use
 
@@ -32,6 +38,7 @@
 | `/benchmark-harness`                     | Detect harness + model, confirm the plan, run `agentic-hard`      |
 | `/benchmark-harness --harness pi -m qwen` | Benchmark that harness and model instead of the detected ones     |
 | "benchmark my current setup"             | Same live run, with the setup advice condensed into next steps    |
+| `/benchmark-harness --ab`                | Run live **and** isolated arms, diff them, attribute every call    |
 | `/benchmark-harness --dry-run`           | Print the resolved plan and stop                                  |
 
 Not for: `bench compare` (two models head-to-head), `bench sweep` (serving-config matrix),
@@ -58,6 +65,11 @@ collect_context.sh ──► machine, GPU contention, endpoint, harness surface
      --yes skips              ▼
                      results/<date>/<label>.json + REPORT-live.md
                                   │
+                        --ab ─────┴──► bench harness run (isolated arm, after the first)
+                                  │
+                                  ▼
+                        surface_usage.py ──► builtin / skill / mcp attribution
+                                  │                (+ live-vs-isolated delta on --ab)
                                   ▼
             conditions + agent score, calls vs par, turns, tokens, advice
 ```
@@ -69,3 +81,7 @@ collect_context.sh ──► machine, GPU contention, endpoint, harness surface
 - `results/` is append-only. Runs never overwrite each other.
 - A live claude-code or opencode run inherits your skills and MCP servers, and each
   concurrent task is a full child session billed to your account.
+- A/B arms run **sequentially**. Concurrent arms would contend for the same GPU and each
+  would become a measurement of the other.
+- Skill invocations are **counted, not named**: benchkit records the tool name and discards
+  the input that holds the skill's identity. MCP servers and plugin tools are named.
