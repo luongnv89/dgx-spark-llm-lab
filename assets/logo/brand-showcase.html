@@ -33,10 +33,9 @@
   .annotate{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:56px 48px;display:flex;justify-content:center}
   .callout{position:absolute;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
   .callout b{color:var(--text);font-weight:500}
-  .c1{top:26px;left:36px} .c1::after,.c2::after,.c3::after{content:"";position:absolute;background:var(--border);width:36px;height:1px}
-  .c1::after{right:-46px;top:10px}
-  .c2{bottom:64px;left:36px} .c2::after{right:-46px;top:-14px;left:auto;width:46px}
-  .c3{top:26px;right:40px;text-align:right} .c3::after{left:-42px;top:10px}
+  .c1{bottom:60px;left:34px}
+  .c2{bottom:16px;left:50%;transform:translateX(-50%);text-align:center}
+  .c3{top:26px;right:34px;text-align:right}
   .concept-copy p{color:var(--muted);margin-bottom:16px;font-size:15px}
   .concept-copy strong{color:var(--text)}
 
@@ -94,10 +93,10 @@
 
 <section class="hero">
   <svg class="mark" width="120" height="120" viewBox="0 0 64 64" aria-label="m-bench mark">
-    <path d="M10,52 V34 Q10,30 14,30 H18 Q22,30 22,34 V52 Z" fill="#A1A1A1"/>
-    <path d="M42,52 V40 Q42,36 46,36 H50 Q54,36 54,40 V52 Z" fill="#A1A1A1"/>
-    <path d="M26,52 V22 Q26,18 30,18 H34 Q38,18 38,22 V52 Z" fill="#FAFAFA"/>
-    <path d="M24,15 V12 Q24,9 27,9 H37 Q40,9 40,12 V15 Z" fill="#00FF41"/>
+    <path d="M10,52 V42 Q10,38 14,38 H18 Q22,38 22,42 V52 Z" fill="#A1A1A1"/>
+    <path d="M26,52 V32 Q26,28 30,28 H34 Q38,28 38,32 V52 Z" fill="#A1A1A1"/>
+    <path d="M42,52 V22 Q42,18 46,18 H50 Q54,18 54,22 V52 Z" fill="#FAFAFA"/>
+    <path d="M40,16 V13 Q40,10 43,10 H53 Q56,10 56,13 V16 Z" fill="#00FF41"/>
   </svg>
   <div class="tag">Brand Identity</div>
   <h1>m<span>-</span>bench</h1>
@@ -112,17 +111,17 @@
     <div class="concept-grid">
       <div class="annotate">
         <svg width="192" height="192" viewBox="0 0 64 64">
-          <path d="M10,52 V34 Q10,30 14,30 H18 Q22,30 22,34 V52 Z" fill="#A1A1A1"/>
-          <path d="M42,52 V40 Q42,36 46,36 H50 Q54,36 54,40 V52 Z" fill="#A1A1A1"/>
-          <path d="M26,52 V22 Q26,18 30,18 H34 Q38,18 38,22 V52 Z" fill="#FAFAFA"/>
-          <path d="M24,15 V12 Q24,9 27,9 H37 Q40,9 40,12 V15 Z" fill="#00FF41"/>
+          <path d="M10,52 V42 Q10,38 14,38 H18 Q22,38 22,42 V52 Z" fill="#A1A1A1"/>
+          <path d="M26,52 V32 Q26,28 30,28 H34 Q38,28 38,32 V52 Z" fill="#A1A1A1"/>
+          <path d="M42,52 V22 Q42,18 46,18 H50 Q54,18 54,22 V52 Z" fill="#FAFAFA"/>
+          <path d="M40,16 V13 Q40,10 43,10 H53 Q56,10 56,13 V16 Z" fill="#00FF41"/>
         </svg>
-        <div class="callout c1"><b>par</b><br>the incumbents,<br>measured first</div>
-        <div class="callout c2"><b>your setup</b><br>config × thinking<br>× harness</div>
+        <div class="callout c1"><b>baseline</b><br>what you<br>serve today</div>
+        <div class="callout c2"><b>candidates</b><br>config × thinking<br>× harness</div>
         <div class="callout c3"><b>the cap</b><br>a winner worth<br>installing</div>
       </div>
       <div class="concept-copy">
-        <p>The mark is a <strong>podium</strong>: three ranking bars frozen at the moment a benchmark finishes. Two muted bars are the field you measured against; the tall white bar is <strong>your configuration</strong>; the green cap is the result that matters — a winner you can actually install with <strong>bench apply</strong>.</p>
+        <p>The mark is a <strong>step-up chart</strong>: three bars climbing left to right. The muted bars are the baseline and the candidates; the tall white bar is where your configuration lands after a run; the green cap crowns the result that matters — a winner you can actually install with <strong>bench apply</strong>.</p>
         <p>The palette is deliberately terminal-native: near-black surfaces like the machines this runs on, one neon-green signal reserved for highlights — never fills — because in m-bench green always means <strong>measured, not decorative</strong>.</p>
         <p>Inter carries the wordmark: geometric, dense at small sizes, at home in a README badge row or a CLI banner. The hyphen takes the accent color — the smallest possible reminder that the tool is about <strong>m-benchmarks vs their-benchmarks</strong>.</p>
       </div>
