@@ -102,7 +102,11 @@ class ClaudeCodeHarness(Harness):
         self.base_url = _api_root(c.base_url) if c.base_url else None
         self.binary = c.binary or "claude"
         self.api_key = c.api_key or "sk-local"
-        self.tools = list(tools)
+        #: live mode: the user's daily setup — full tool set, skills, MCP servers
+        self.live = bool(c.live)
+        # live mode unpins the built-in tool set: Task/WebSearch and friends are
+        # part of what a real session can reach, caveat recorded in describe()
+        self.tools = [] if self.live else list(tools)
         self.effort = effort
         self.extra_args = list(c.extra_args)
 
@@ -185,8 +189,14 @@ class ClaudeCodeHarness(Harness):
             base_url=self.base_url,
             source="endpoint" if self.uses_endpoint else "claude-code-auth",
             api="anthropic-messages", tools=self.tools, effort=self.effort,
+            live=self.live,
             available=ok, detail=detail,
-            caveats=[
+            caveats=([
+                "live mode: Claude Code ran with your own settings, slash-command "
+                "skills and MCP servers enabled, and with every built-in tool "
+                "available. A subagent, hook or MCP server that calls another "
+                "model contaminates this measurement.",
+            ] if self.live else [
                 # Never let a missing number read as a cheap harness.
                 "reasoning_tokens is always 0: Claude Code reports thinking tokens "
                 "in usage.output_tokens_details.thinking_tokens, which this "
@@ -197,7 +207,7 @@ class ClaudeCodeHarness(Harness):
                 "Built-in tools are pinned to " + ",".join(self.tools) +
                 "; Task/Workflow/WebSearch/WebFetch are disabled because they can "
                 "reach other models or outside context.",
-            ],
+            ]),
         )
 
     # --- workspace ------------------------------------------------------
@@ -231,12 +241,14 @@ class ClaudeCodeHarness(Harness):
             "--output-format", "stream-json",
             "--verbose",                 # required for stream-json in print mode
             "--permission-mode", "bypassPermissions",  # throwaway temp workspace
-            "--bare",                    # no hooks/plugins/auto-memory/CLAUDE.md
-            "--disable-slash-commands",  # no user-installed skills
-            "--strict-mcp-config",
-            "--mcp-config", '{"mcpServers":{}}',
+            *([] if self.live else [
+                "--bare",                    # no hooks/plugins/auto-memory/CLAUDE.md
+                "--disable-slash-commands",  # no user-installed skills
+                "--strict-mcp-config",
+                "--mcp-config", '{"mcpServers":{}}',
+                "--setting-sources", "",     # ignore user/project/local settings
+            ]),                              # live mode keeps all of these (#76)
             "--no-session-persistence",  # no state between tasks
-            "--setting-sources", "",     # ignore user/project/local settings
         ]
         if self.tools:
             argv += ["--tools", *self.tools]

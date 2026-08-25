@@ -56,6 +56,8 @@ class OpenCodeHarness(Harness):
         self.variant = variant
         self.api_key = c.api_key
         self.extra_args = list(c.extra_args)
+        #: live mode: the user's daily setup — plugins enabled (--pure dropped)
+        self.live = bool(c.live)
 
     @property
     def uses_endpoint(self):
@@ -141,11 +143,18 @@ class OpenCodeHarness(Harness):
 
     def describe(self):
         ok, detail = self.available()
-        return dict(harness="opencode", provider=self.provider, model=self.model,
-                    model_spec=self.model_spec,
-                    source="endpoint" if self.uses_endpoint else "opencode-config",
-                    base_url=self.base_url, variant=self.variant,
-                    available=ok, detail=detail)
+        d = dict(harness="opencode", provider=self.provider, model=self.model,
+                 model_spec=self.model_spec,
+                 source="endpoint" if self.uses_endpoint else "opencode-config",
+                 base_url=self.base_url, variant=self.variant, live=self.live,
+                 available=ok, detail=detail)
+        if self.live:
+            d["disabled_isolation"] = ["--pure"]
+            d["caveats"] = [
+                "live mode: opencode ran with external plugins enabled. A plugin "
+                "that reaches another model contaminates this measurement.",
+            ]
+        return d
 
     # --- workspace ------------------------------------------------------
     #: written next to the workspace, not into it — but excluded defensively
@@ -208,7 +217,7 @@ class OpenCodeHarness(Harness):
             "--dir", workdir,
             "--format", "json",
             "--auto",     # approve tool use; the workspace is a throwaway temp dir
-            "--pure",     # no external plugins — they can reach other models
+            *([] if self.live else ["--pure"]),   # live mode keeps the user's plugins (#76)
             "-m", self.model_spec,
         ]
         if self.variant:
