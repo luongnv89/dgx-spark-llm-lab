@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>m-bench — Brand Identity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0A; --surface:#111111; --border:#262626; --muted:#A1A1A1;
+    --text:#FAFAFA; --accent:#00FF41; --accent-deep:#00C853;
+    --bg-light:#FAFAFA;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+  .container{max-width:1100px;margin:0 auto;padding:0 24px}
+  .section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.18em;color:var(--accent);display:block;margin-bottom:16px}
+  h2{font-size:28px;font-weight:800;letter-spacing:-.02em;margin-bottom:32px}
+
+  /* Hero */
+  .hero{background:radial-gradient(ellipse at 50% -20%,#16241a 0%,var(--bg) 60%);padding:96px 24px 80px;text-align:center;border-bottom:1px solid var(--border)}
+  .hero .mark{filter:drop-shadow(0 0 34px rgba(0,255,65,.28))}
+  .hero h1{font-size:44px;font-weight:800;letter-spacing:-.03em;margin-top:28px}
+  .hero h1 span{color:var(--accent)}
+  .hero .tag{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.22em;color:var(--muted);margin-bottom:8px}
+  .hero p{color:var(--muted);max-width:560px;margin:14px auto 0;font-size:17px}
+
+  /* Concept */
+  .concept{padding:88px 0;border-bottom:1px solid var(--border)}
+  .concept-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+  .annotate{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:56px 48px;display:flex;justify-content:center}
+  .callout{position:absolute;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+  .callout b{color:var(--text);font-weight:500}
+  .c1{bottom:60px;left:34px}
+  .c2{bottom:16px;left:50%;transform:translateX(-50%);text-align:center}
+  .c3{top:26px;right:34px;text-align:right}
+  .concept-copy p{color:var(--muted);margin-bottom:16px;font-size:15px}
+  .concept-copy strong{color:var(--text)}
+
+  /* Variants */
+  .variants{padding:88px 0;border-bottom:1px solid var(--border)}
+  .vgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  .card{border-radius:16px;border:1px solid var(--border);padding:40px 32px 20px;position:relative;display:flex;align-items:center;justify-content:center;min-height:190px;transition:transform .18s ease}
+  .card:hover{transform:translateY(-4px)}
+  .card.dark{background:var(--surface)} .card.light{background:var(--bg-light);box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  .card .label{position:absolute;top:14px;left:16px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .card.light .label{color:#6b6b6b}
+  .card .file{position:absolute;bottom:12px;right:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+  .card.light .file{color:#9a9a9a}
+  .card.wide{grid-column:span 2}
+  .card img{max-width:78%;height:auto}
+
+  /* Palette */
+  .palette{padding:88px 0;border-bottom:1px solid var(--border)}
+  .pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .chip{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
+  .swatch{height:86px;display:flex;align-items:flex-end;padding:10px}
+  .swatch code{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 7px;border-radius:6px;background:rgba(0,0,0,.45);color:#fff}
+  .chip .meta{padding:12px 14px}
+  .chip .meta b{font-size:13px;display:block}
+  .chip .meta span{font-size:12px;color:var(--muted)}
+
+  /* Typography */
+  .type{padding:88px 0;border-bottom:1px solid var(--border)}
+  .specimen{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px}
+  .specimen .big{font-size:40px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+  .specimen .mid{font-size:22px;font-weight:700;margin-bottom:18px}
+  .specimen .body{font-size:15px;color:var(--muted);max-width:600px}
+  .specimen .row{display:flex;gap:12px;align-items:baseline;margin-bottom:14px;flex-wrap:wrap}
+  .specimen .tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent)}
+
+  /* Dev ref */
+  .devref{padding:88px 0;border-bottom:1px solid var(--border)}
+  .dev-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  pre{background:#0d0d0d;border:1px solid var(--border);border-radius:14px;padding:24px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.75;overflow-x:auto;color:#d4d4d4}
+  pre .k{color:#79c0ff} pre .s{color:var(--accent)} pre .c{color:#6a6a6a}
+  .tree b{color:var(--text);font-weight:500}
+
+  footer{padding:56px 24px;text-align:center;color:var(--muted);font-size:14px}
+  footer b{color:var(--text)} footer .g{color:var(--accent)}
+
+  @media(max-width:760px){
+    .concept-grid,.dev-grid{grid-template-columns:1fr}
+    .vgrid{grid-template-columns:1fr} .card.wide{grid-column:span 1}
+    .pgrid{grid-template-columns:repeat(2,1fr)}
+    .hero h1{font-size:34px}
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <svg class="mark" width="120" height="120" viewBox="0 0 64 64" aria-label="m-bench mark">
+    <path d="M10,52 V42 Q10,38 14,38 H18 Q22,38 22,42 V52 Z" fill="#A1A1A1"/>
+    <path d="M26,52 V32 Q26,28 30,28 H34 Q38,28 38,32 V52 Z" fill="#A1A1A1"/>
+    <path d="M42,52 V22 Q42,18 46,18 H50 Q54,18 54,22 V52 Z" fill="#FAFAFA"/>
+    <path d="M40,16 V13 Q40,10 43,10 H53 Q56,10 56,13 V16 Z" fill="#00FF41"/>
+  </svg>
+  <div class="tag">Brand Identity</div>
+  <h1>m<span>-</span>bench</h1>
+  <p>Benchmark your whole LLM setup — serving config, thinking mode, coding harness — on your own machine.</p>
+</section>
+
+<div class="container">
+
+  <section class="concept">
+    <span class="section-label">Design Concept</span>
+    <h2>A leaderboard you can serve</h2>
+    <div class="concept-grid">
+      <div class="annotate">
+        <svg width="192" height="192" viewBox="0 0 64 64">
+          <path d="M10,52 V42 Q10,38 14,38 H18 Q22,38 22,42 V52 Z" fill="#A1A1A1"/>
+          <path d="M26,52 V32 Q26,28 30,28 H34 Q38,28 38,32 V52 Z" fill="#A1A1A1"/>
+          <path d="M42,52 V22 Q42,18 46,18 H50 Q54,18 54,22 V52 Z" fill="#FAFAFA"/>
+          <path d="M40,16 V13 Q40,10 43,10 H53 Q56,10 56,13 V16 Z" fill="#00FF41"/>
+        </svg>
+        <div class="callout c1"><b>baseline</b><br>what you<br>serve today</div>
+        <div class="callout c2"><b>candidates</b><br>config × thinking<br>× harness</div>
+        <div class="callout c3"><b>the cap</b><br>a winner worth<br>installing</div>
+      </div>
+      <div class="concept-copy">
+        <p>The mark is a <strong>step-up chart</strong>: three bars climbing left to right. The muted bars are the baseline and the candidates; the tall white bar is where your configuration lands after a run; the green cap crowns the result that matters — a winner you can actually install with <strong>bench apply</strong>.</p>
+        <p>The palette is deliberately terminal-native: near-black surfaces like the machines this runs on, one neon-green signal reserved for highlights — never fills — because in m-bench green always means <strong>measured, not decorative</strong>.</p>
+        <p>Inter carries the wordmark: geometric, dense at small sizes, at home in a README badge row or a CLI banner. The hyphen takes the accent color — the smallest possible reminder that the tool is about <strong>m-benchmarks vs their-benchmarks</strong>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="variants">
+    <span class="section-label">Logo Variants</span>
+    <h2>Seven files, one geometry</h2>
+    <div class="vgrid">
+      <div class="card wide dark"><span class="label">Primary lockup · dark surfaces</span><img src="logo-full.svg" alt="m-bench full logo" style="max-width:420px"><span class="file">logo-full.svg</span></div>
+      <div class="card dark"><span class="label">Monochrome · dark</span><img src="logo-white.svg" alt="white variant" style="max-width:280px"><span class="file">logo-white.svg</span></div>
+      <div class="card dark"><span class="label">Mark</span><img src="logo-mark.svg" alt="mark" style="width:128px"><span class="file">logo-mark.svg</span></div>
+      <div class="card light"><span class="label">App icon</span><img src="logo-icon.svg" alt="app icon" style="width:150px;border-radius:26px"><span class="file">logo-icon.svg</span></div>
+      <div class="card light"><span class="label">Wordmark · light</span><img src="logo-wordmark.svg" alt="wordmark" style="width:200px"><span class="file">logo-wordmark.svg</span></div>
+      <div class="card wide light"><span class="label">Print · light surfaces</span><img src="logo-black.svg" alt="black variant" style="max-width:420px"><span class="file">logo-black.svg</span></div>
+      <div class="card dark"><span class="label">Favicon · 16×16px</span><img src="favicon.svg" alt="favicon" style="width:64px;image-rendering:auto"><span class="file">favicon.svg</span></div>
+      <div class="card dark" style="display:none"></div>
+    </div>
+  </section>
+
+  <section class="palette">
+    <span class="section-label">Color Palette</span>
+    <h2>One signal color</h2>
+    <div class="pgrid">
+      <div class="chip"><div class="swatch" style="background:#00FF41"><code>#00FF41</code></div><div class="meta"><b>Neon Green</b><span>Accent — caps, lines, highlight text only</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#00C853"><code>#00C853</code></div><div class="meta"><b>Deep Green</b><span>Accent on light surfaces (AA contrast)</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#FAFAFA"><code style="color:#000;background:rgba(255,255,255,.6)">#FAFAFA</code></div><div class="meta"><b>Text</b><span>Winner bar, headlines, wordmark</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#A1A1A1"><code style="color:#000;background:rgba(255,255,255,.6)">#A1A1A1</code></div><div class="meta"><b>Muted</b><span>Competitor bars, secondary text</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#111111"><code>#111111</code></div><div class="meta"><b>Surface</b><span>Cards, app-icon tile</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#262626"><code>#262626</code></div><div class="meta"><b>Border</b><span>Hairlines, icon tile edge</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#0A0A0A"><code>#0A0A0A</code></div><div class="meta"><b>Background Dark</b><span>Default canvas</span></div></div>
+      <div class="chip"><div class="swatch" style="background:#FAFAFA;outline:1px dashed #262626;outline-offset:-4px"><code style="color:#000;background:rgba(255,255,255,.6)">#FAFAFA</code></div><div class="meta"><b>Background Light</b><span>Print &amp; light-mode canvas</span></div></div>
+    </div>
+  </section>
+
+  <section class="type">
+    <span class="section-label">Typography</span>
+    <h2>Inter</h2>
+    <div class="specimen">
+      <div class="row"><span class="tag">Bold 800</span><span class="big">Rank whole setups, not just models.</span></div>
+      <div class="row"><span class="tag">Bold 700</span><span class="mid">m-bench — machine-local LLM benchmarking</span></div>
+      <div class="row"><span class="tag">Regular 400</span><span class="body">Every score names its harness, both thinking modes get their own row, and a run that does not change what gets served was not worth running.</span></div>
+    </div>
+  </section>
+
+  <section class="devref">
+    <span class="section-label">Developer Reference</span>
+    <h2>Drop-in tokens</h2>
+    <div class="dev-grid">
+<pre><span class="k">colors</span>: {
+  <span class="k">brand</span>: {
+    <span class="k">primary</span>:  <span class="s">'#FAFAFA'</span>,
+    <span class="k">surface</span>:  <span class="s">'#111111'</span>,
+    <span class="k">border</span>:   <span class="s">'#262626'</span>,
+    <span class="k">muted</span>:    <span class="s">'#A1A1A1'</span>,
+    <span class="k">accent</span>:   <span class="s">'#00FF41'</span>,  <span class="c">// deep: '#00C853' on light</span>
+  }
+}</pre>
+<pre><span class="c">assets/logo/</span>
+├── <b>logo-mark.svg</b>        canonical geometry
+├── <b>logo-full.svg</b>        lockup · dark
+├── <b>logo-wordmark.svg</b>    text only · light
+├── <b>logo-icon.svg</b>        512² app tile
+├── <b>favicon.svg</b>          16² simplified
+├── <b>logo-white.svg</b>       mono · dark
+└── <b>logo-black.svg</b>       mono · light</pre>
+    </div>
+  </section>
+
+</div>
+
+<footer><b>m<span class="g">-</span>bench</b> · Brand Identity · benchmarked where it runs</footer>
+
+</body>
+</html>

@@ -8,7 +8,7 @@ description: Benchmark this harness's live configuration (skills, MCP servers, s
 Run the repo's benchmark against *this* harness exactly as it is configured
 right now — extensions, skills and MCP servers included, nothing isolated.
 
-From the repository root (`/home/montimage/buildspace/dgx-spark-llm-lab`), run:
+From the repository root (`/home/montimage/buildspace/m-bench`), run:
 
 ```bash
 ./bench setup --harness pi --suite agentic-hard

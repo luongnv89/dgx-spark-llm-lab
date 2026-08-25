@@ -1,4 +1,4 @@
-# dgx-spark-llm-lab — CLAUDE.md
+# m-bench — CLAUDE.md
 
 ## Critical commands
 

@@ -13,8 +13,8 @@ service.
 ## 1. Install
 
 ```bash
-git clone https://github.com/luongnv89/dgx-spark-llm-lab.git
-cd dgx-spark-llm-lab
+git clone https://github.com/luongnv89/m-bench.git
+cd m-bench
 pip install -e .                       # openai + aiohttp
 ```
 

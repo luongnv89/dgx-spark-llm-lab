@@ -1,4 +1,4 @@
-# Modernization Report — llm-serving (dgx-spark-llm-lab)
+# Modernization Report — llm-serving (m-bench)
 
 **Audited:** 2026-08-20 · **Commit:** `509220a` · **Branch:** `main`
 **Stack:** Python 3.13 (CPython), no packaging manifest · aiohttp router · Docker/vLLM serving scripts

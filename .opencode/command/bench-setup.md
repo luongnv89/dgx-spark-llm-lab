@@ -3,7 +3,7 @@ description: Benchmark opencode's live configuration (plugins, MCP servers inclu
 ---
 
 Benchmark this harness's live setup with the repo's own tooling. From
-`/home/montimage/buildspace/dgx-spark-llm-lab`, run:
+`/home/montimage/buildspace/m-bench`, run:
 
 ```bash
 ./bench setup --harness opencode --suite agentic-hard

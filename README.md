@@ -3,6 +3,8 @@
 ![validate](https://img.shields.io/badge/validate-28%2F28-brightgreen)
 ![reference hardware](https://img.shields.io/badge/reference%20hardware-DGX%20Spark%20GB10-76B900)
 
+<p><img src="assets/logo/logo-mark.svg" width="64" alt="m-bench podium mark"></p>
+
 # Find the best LLM setup for your own machine
 
 Public leaderboards rank models on hardware you don't have, at settings you won't use,
