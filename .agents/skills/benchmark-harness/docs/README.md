@@ -19,6 +19,9 @@
 - **Measures the setup, not just the model.** Wraps `bench setup run`, so your skills, MCP
   servers, plugins and settings are part of the measurement, and the run ends with written
   advice about them.
+- **Records the conditions.** Machine, GPU (and what else is using it), serving endpoint,
+  and the harness's live surface — skills, MCP servers, extensions — are captured before
+  the run and appended to the report, so a score stays readable months later.
 - **Confirms before it spends.** A run is 15–40 minutes and, on a hosted model, real money,
   so it prints the plan and waits — unless you pass `--yes`.
 
@@ -47,13 +50,16 @@ Not for: `bench compare` (two models head-to-head), `bench sweep` (serving-confi
 detect_setup.sh ──► preflight (16/16 oracles, harness ok)
         │
         ▼
+collect_context.sh ──► machine, GPU contention, endpoint, harness surface
+        │
+        ▼
   confirm plan  ──►  bench setup run --harness <h> -m <spec> --suite agentic-hard
         │                     │
      --yes skips              ▼
                      results/<date>/<label>.json + REPORT-live.md
                                   │
                                   ▼
-                   agent score, calls vs par, turns, tokens, advice
+            conditions + agent score, calls vs par, turns, tokens, advice
 ```
 
 ## Notes

@@ -100,6 +100,32 @@
         "Printed the plan block and stopped at the confirm gate",
         "Did not launch the suite before the gate"
       ]
+    },
+    {
+      "id": 9,
+      "kind": "happy-path",
+      "prompt": "/benchmark-harness --yes",
+      "expected_output": "Captures run conditions before launching, and the final report leads with them and appends them to REPORT-live.md.",
+      "files": [],
+      "expectations": [
+        "Ran scripts/collect_context.sh before starting the suite, not after",
+        "The summary opens with machine, GPU, endpoint and harness surface before any score",
+        "Appended the context to this run's REPORT-live.md and said so",
+        "Did not modify a report from an earlier campaign"
+      ]
+    },
+    {
+      "id": 10,
+      "kind": "edge",
+      "prompt": "/benchmark-harness (on a machine where another job already holds the GPU)",
+      "expected_output": "Surfaces the GPU contention at the confirm gate and offers to wait rather than producing an incomparable number.",
+      "files": [],
+      "expectations": [
+        "Named the other GPU process and its memory use in the plan block",
+        "Explained that a contended GPU makes wall-clock and turn counts incomparable",
+        "Offered to wait instead of running silently",
+        "Still allowed the user to proceed if they chose to"
+      ]
     }
   ]
 }
