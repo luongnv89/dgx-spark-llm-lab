@@ -67,6 +67,35 @@ ollama-qwen3-coder-latest think-OFF` — because benchmarking two models through
 the ordinary case, and a file named after the harness alone would overwrite one run with the
 other.
 
+## Benchmark your live setup (`bench setup`)
+
+`bench harness run` isolates on purpose: pi runs with `--no-extensions`, opencode with
+`--pure`, Claude Code without skills or MCP servers — so the *model* is what varies.
+Sometimes the opposite question is the interesting one: **is my daily setup any good, and
+what should I change about it?**
+
+```bash
+./bench setup --harness pi --suite agentic-hard
+```
+
+`bench setup run` is `bench harness run` in **live mode**: every isolation flag is dropped
+and the harness runs exactly as you experience it — extensions, slash-command skills,
+MCP servers, settings files and (for Claude Code) the full built-in tool set all included.
+Nothing to reconfigure; point it at the repo and go. The result json lands in `results/`
+as usual, and a `REPORT-live.md` is written beside it ending in a **Suggestions** section:
+heuristic advice derived from the run's own numbers — context bloat traced back to installed
+skills/MCP servers, turn-limit hits pointing at missing tools, low valid-call rates pointing
+at schema mismatches, and so on.
+
+**The contamination caveat, stated once more:** a live setup can contain components that
+call other models (pi extensions and advisor tools are the usual offenders). A live-mode
+score measures the *whole setup*, whatever models it actually used. Every live result file
+records which isolation flags were disabled and carries that caveat in its metadata; do not
+quote a live number as a model number.
+
+Live results stamp `live` in both the config metadata and the label (`pi live prov-model
+think-OFF`), so they sort apart from isolated runs when reports compare setups.
+
 ## What stays the same
 
 Scoring. A task is still solved when `check(ws)` says the final workspace is right, and
