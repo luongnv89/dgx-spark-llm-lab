@@ -5,7 +5,7 @@ test: each adapter drops its own isolation flags in live mode, keeps them
 otherwise, and a live run always says so in describe() — an unlabelled live run
 would let a contaminated score be read as a clean one.
 """
-import pytest
+from unittest.mock import patch
 
 from benchkit import advice, report
 from benchkit.harness import HarnessConfig
@@ -136,37 +136,47 @@ def test_advice_reads_live_flag_from_config_or_harness_block():
 
 
 # --- report / cli wiring --------------------------------------------------------
-def _result_file(tmp_path):
+def _result_file(tmp_path=None):
     import json
+    import pathlib
+    import tempfile
+
     summary = _summary(mean_input_tokens=90_000)
     summary["config"]["extra"]["live"] = True
-    p = tmp_path / "r.json"
+    base = pathlib.Path(tmp_path) if tmp_path is not None else pathlib.Path(tempfile.mkdtemp())
+    p = base / "r.json"
     p.write_text(json.dumps(dict(summary=summary, results=[])))
     return str(p)
 
 
-@pytest.fixture(autouse=True)
-def _fake_paths(monkeypatch):
-    monkeypatch.setattr(report, "_raw_data_section",
-                        lambda runs, labels: ["\n## Raw data\n"])
-    monkeypatch.setattr(report, "_setup_section",
-                        lambda S, short: ([""], 1, True))
-    monkeypatch.setattr(report, "_charts_section", lambda *a: [])
-    monkeypatch.setattr(report, "_difficulty_section", lambda S, labels: [])
-    monkeypatch.setattr(report, "_disagreement_section",
-                        lambda *a, **k: [])
-    monkeypatch.setattr(report, "_caveats_section", lambda *a, **k: [])
+def _patched_report_build(*args, **kwargs):
+    """Helper that patches report sections that require heavy fixtures."""
+    patches = [
+        patch.object(report, "_raw_data_section", lambda runs, labels: ["\n## Raw data\n"]),
+        patch.object(report, "_setup_section", lambda S, short: ([""], 1, True)),
+        patch.object(report, "_charts_section", lambda *a: []),
+        patch.object(report, "_difficulty_section", lambda S, labels: []),
+        patch.object(report, "_disagreement_section", lambda *a, **k: []),
+        patch.object(report, "_caveats_section", lambda *a, **k: []),
+    ]
+    for p in patches:
+        p.start()
+    try:
+        return report.build(*args, **kwargs)
+    finally:
+        for p in patches:
+            p.stop()
 
 
-def test_report_build_with_advice_includes_suggestions(tmp_path):
-    md = report.build([report.load(_result_file(tmp_path))], title="t",
-                      advice=True)
+def test_report_build_with_advice_includes_suggestions(tmp_path=None):
+    md = _patched_report_build([report.load(_result_file(tmp_path))], title="t",
+                               advice=True)
     assert "## Suggestions" in md
     assert "MCP" in md or "skills" in md
 
 
-def test_report_build_without_advice_omits_section(tmp_path):
-    md = report.build([report.load(_result_file(tmp_path))], title="t")
+def test_report_build_without_advice_omits_section(tmp_path=None):
+    md = _patched_report_build([report.load(_result_file(tmp_path))], title="t")
     assert "Suggestions" not in md
 
 

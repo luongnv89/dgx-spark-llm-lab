@@ -8,9 +8,9 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
-from benchkit import report, runner
-from benchkit.references import REFERENCES
-from benchkit.suites import DESCRIPTIONS, SUITES, get, kind
+from benchkit import report, runner  # noqa: E402
+from benchkit.references import REFERENCES  # noqa: E402
+from benchkit.suites import DESCRIPTIONS, SUITES, get, kind  # noqa: E402
 
 RESULTS = os.path.join(HERE, "results")
 
