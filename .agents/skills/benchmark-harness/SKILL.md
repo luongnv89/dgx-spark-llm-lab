@@ -261,11 +261,14 @@ conditions captured in step 3 to the report the run just wrote, so the numbers a
 setup that produced them stay together:
 
 ```bash
-cat /tmp/bench-harness/context.md >> "<results dir>/REPORT-live.md"
+report=$(awk '/^report written to /{print $NF}' "$log" | tail -1)
+cat /tmp/bench-harness/context.md >> "$report"
 ```
 
-Appending to this run's own report is the only write allowed here — never touch a report
-from an earlier campaign. Then read the printed summary and the advice section, and give
+Do not assume the filename is `REPORT-live.md`: the runner de-duplicates it, so a results
+directory that already holds one gets `REPORT-live.1.md`, `REPORT-live.2.md`, and so on —
+only the log line names this run's report. Appending to this run's own report is the only
+write allowed here — never touch a report from an earlier campaign. Then read the printed summary and the advice section, and give
 the user:
 
 - **The conditions first** — machine, GPU contention, endpoint, harness version and how
