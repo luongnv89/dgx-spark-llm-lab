@@ -15,8 +15,10 @@ multi-turn tool loops.
 
 So the answer is machine-local. The best configuration for user A is frequently the wrong
 one for user B — different GPU, different memory ceiling, different quantisation available,
-different concurrency, different work. **Your job is to measure on the machine in front of
-you and end with a config that machine will actually serve.** A run that does not change
+different concurrency, different work. And the configuration includes the coding agent
+wrapped around the model: identical weights scored 44.9 or 68.2 on this repo's ranking suite
+depending only on which harness ran them. **Your job is to measure on the machine in front
+of you and end with a config that machine will actually serve.** A run that does not change
 what gets served was not worth doing.
 
 ## Step 0 — establish the endpoint
@@ -150,6 +152,23 @@ The gap is not cosmetic — on this repo's first such comparison the same model 
 through the built-in loop and 77.4 through pi. When you report a number, name the harness it
 came from.
 
+### Live mode — measure the setup you actually run
+
+`bench harness run` isolates on purpose: no extensions, no skills, no MCP servers, so the
+model is what varies. When the question is "is my daily setup any good, and what should I
+change about it?", drop the isolation instead:
+
+```bash
+./bench setup --harness pi --suite agentic-hard --samples 2
+```
+
+Every isolation flag is dropped and the harness runs exactly as its owner experiences it.
+`REPORT-live.md` ends in a Suggestions section derived from the run's own numbers — context
+bloat traced to installed skills/MCP servers, turn-limit hits to missing tools, low
+valid-call rates to schema mismatches. Treat a live result as a measurement of the whole
+setup: its components may call other models, so a live number is never a model number.
+Result files stamp `live` for exactly this reason.
+
 ## Step 6b — sweep whole setups, not one axis
 
 Steps 4 and 6 vary one axis each. When the question is "what is the best setup on this
@@ -217,6 +236,8 @@ row is a guess, not a known-good config.
 - **Never let a harness extension call a different model.** pi's extensions can; the adapter
   passes `--no-extensions` for exactly this reason. Verify the equivalent for any harness you
   add, or the benchmark silently measures something else.
+- **Never quote a live-setup score as a model score.** `bench setup` measures the user's
+  daily configuration, whatever models its parts actually called; results stamp `live`.
 - **If a suite returns ~100 %, say it has stopped measuring** rather than calling the model
   perfect. Then write harder tasks — see `docs/REPRODUCING.md`.
 

@@ -9,16 +9,16 @@ actually run it on.** Everything below moves closer to that.
 - [x] Agentic tool calling: `agentic` (floor), `agentic-hard` (ranking, oracle-par efficiency)
 - [x] Installable serving configs — `bench apply`, measured rows in `configs/README.md`
 - [x] `AGENTS.md` — a runbook an AI agent can execute unattended
+- [x] Harness adapters — pi, opencode, Claude Code — plus **live mode**: `bench setup`
+      benchmarks the user's daily configuration end-to-end and reports suggestions (#76)
 
-## Next: benchmark the harness, not just the model
+## Benchmarking the harness, not just the model
 
 A model is only half of what a user runs. The other half is the **coding harness** wrapped
 around it — its system prompt, its tool schemas, its context strategy, how it chunks edits,
 how many turns it will spend. The same weights behind two harnesses are two different
-products, and today this repo measures the model through *our* tool loop, which is nobody's
-actual setup.
-
-So the next step is to run the same tasks through the harness sitting on the user's machine:
+products, which is why the suites also run through the harness sitting on the user's
+machine:
 
 | Harness | Integration route | Status |
 |---|---|---|
@@ -59,6 +59,12 @@ rate and efficiency stay as separate columns next to the composite for exactly t
 
 One caveat on the table itself: with every harness now above 87.5 % solved, the 8-task ranking
 suite is close to saturating and no longer has the headroom to separate the top two.
+
+Live mode landed on top of the adapters (#76): `bench setup` drops every isolation flag and
+measures the user's daily configuration — extensions, slash-command skills, MCP servers,
+settings files — ending in heuristic suggestions derived from the run's own numbers. Live
+results are stamped `live`, because a configuration whose parts may call other models is a
+measurement of the whole setup and never a model number.
 
 Still open for the remaining adapters:
 

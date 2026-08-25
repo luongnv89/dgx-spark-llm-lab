@@ -117,6 +117,27 @@ the end unless you pass `--no-restore`.
 **This takes the endpoint down** for several minutes per swap. Don't run it against a
 server other people are using.
 
+## 7. Through the coding agent you actually use
+
+Everything above runs through benchkit's own tool loop, which is nobody's real setup. Two
+ways to close that gap:
+
+```bash
+./bench harness run --harness opencode -m <provider>/<model> --suite agentic-hard
+```
+
+```bash
+./bench setup --harness pi --suite agentic-hard
+```
+
+`harness run` isolates — no extensions, no skills, no MCP servers — so the model alone is
+what varies, and it uses your own harness configuration and credentials to reach it.
+`setup` drops the isolation and measures your daily setup end-to-end, writing a
+`REPORT-live.md` that ends in suggestions about that setup. A live score measures the whole
+configuration (its parts may call other models), never the model.
+
+Adapter details, `--endpoint` injection and per-harness caveats: [HARNESSES.md](HARNESSES.md).
+
 ## Interpreting a result honestly
 
 - **Sample count.** At `--samples 2` the standard error on a 28-task suite is roughly

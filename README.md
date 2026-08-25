@@ -5,10 +5,11 @@
 
 # Find the best LLM setup for your own machine
 
-Public leaderboards rank models on hardware you don't have, at settings you won't use.
-This runs the suites against your endpoint and ends in a config file you serve.
+Public leaderboards rank models on hardware you don't have, at settings you won't use,
+through an agent that isn't yours. This benchmarks the whole stack — serving config,
+thinking mode, and the coding agent you actually run — and ends in a config you serve.
 
-[**Best recipe now &rarr;**](#best-recipe-right-now) · [**Quick start &rarr;**](#quick-start) · [**Findings &rarr;**](#what-the-campaigns-found)
+[**Best recipe &rarr;**](#best-recipe-right-now) · [**Your harness &rarr;**](#your-harness-is-part-of-the-setup) · [**Quick start &rarr;**](#quick-start) · [**Findings &rarr;**](#what-the-campaigns-found)
 
 ## Best recipe right now
 
@@ -70,7 +71,7 @@ graph TD
 | Both thinking modes, always | Separate rows — they are separate products |
 | Cost next to accuracy | Output tokens, wall-clock, turns, truncation all reported |
 | Two workload shapes | One-shot code generation and multi-turn tool calling disagree |
-| Your harness, your models | `bench harness models` lists what your pi/opencode can already reach |
+| Your agent counts too | `bench setup` benchmarks your daily editor config — skills, MCP, extensions included |
 | The winner is installable | `bench apply <config> --restart` and you are serving it |
 | Nothing scored on vibes | Hidden unit tests, each proven passable by a reference solution |
 
@@ -109,6 +110,34 @@ Build the report:
 `validate` must print `28/28` (and `--suite agentic-all` must print `16/16`). If it does
 not, the test is broken and no model score means anything.
 
+## Your harness is part of the setup
+
+Half of what you run is not the model. It is the coding agent around it — its system
+prompt, tool schemas, how much context it resends. Same weights, tasks and hardware,
+four agents ([campaign](results/2026-08-20-pi-harness/REPORT-hard.md)):
+
+| Harness | Agent score (`agentic-hard`) | Input tokens per task |
+|---|---:|---:|
+| claude-code | **68.2** | ~16k |
+| opencode | 60.3 | ~179k |
+| pi | 55.0 | ~119k |
+| benchkit built-in loop | 44.9 | — |
+
+Two ways to measure yours:
+
+| Mode | Command | What varies |
+|---|---|---|
+| Isolated | `./bench harness run --harness opencode -m <provider>/<model> --suite agentic-hard` | The model alone — extensions, skills and MCP stripped |
+| Live | `./bench setup --harness pi --suite agentic-hard` | Your daily setup, exactly as you experience it |
+
+A live run writes `REPORT-live.md`, ending in a Suggestions section that ties numbers to
+causes: context bloat traced to installed skills and MCP servers, turn-limit hits to
+missing tools, low valid-call rates to schema mismatches. One rule — components inside a
+live setup may call other models, so a live score measures the whole setup. Never quote it
+as a model number.
+
+[Adapter details, `--endpoint` injection, per-harness caveats &rarr;](docs/HARNESSES.md)
+
 ## What the campaigns found
 
 | Campaign | Question | Answer |
@@ -120,11 +149,13 @@ not, the test is broken and no model score means anything.
 | [2026-08-20](results/2026-08-20-agentic-hard/) | Can a harder suite separate configs that both look perfect? | **Yes**, 54.6 vs 50.1 — efficiency against oracle par is what separates them |
 | [2026-08-20](results/2026-08-20-pi-harness/REPORT.md) | Does the harness around the model change the answer? | **Yes, by as much as a model swap.** Same model, same tasks: 67.4 built-in loop, 76.7 `claude-code`, 77.4 `pi`, 79.3 `opencode` |
 | [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `claude-code` 68.2, `opencode` 60.3, `pi` 55.0, built-in 44.9 — prefill spans ~16k to ~179k input tokens per task |
+| [2026-08-21](results/2026-08-21/) | Can a free stealth cloud model drive a real tool loop? | **Yes.** 74.8 agent score, 96.9 % solve via opencode — every failure was a generation that never reasoned ([report](results/2026-08-21/REPORT.md)) |
 
-The recurring lesson: benchmark both thinking modes on the workload you actually run.
-Reasoning-trained models collapse without their thinking block; non-reasoning models burn
-thousands of tokens with it. The right answer flips between one-shot generation and tool
-loops.
+The recurring lesson: benchmark both thinking modes on the workload you actually run,
+through the agent you actually run it. Reasoning-trained models collapse without their
+thinking block; non-reasoning models burn thousands of tokens with it. The right answer
+flips between one-shot generation and tool loops, and swapping only the harness moved
+identical weights by up to 23 points.
 
 ## The suites
 
@@ -148,6 +179,7 @@ loops.
 | `./bench harness list` | Which coding harnesses are installed here |
 | `./bench harness models` | Which models each can reach, from **your** config |
 | `./bench harness run --harness opencode -m <p>/<m>` | Run a suite through a real coding agent |
+| `./bench setup --harness pi` | Benchmark your live daily setup, with suggestions about it |
 | `./bench configs` | List serving recipes, and which are sweepable |
 | `./bench apply <name> [--restart]` | Install one as your live server config (serving host) |
 | `./bench compare <model>...` | DGX box only: swap, run, restore, report |
@@ -243,7 +275,9 @@ between one-shot coding and tool loops.
 The same model scores 12 points apart through four different tool loops, so the suites also
 run through the coding agent you actually use (`pi`, `opencode`, `claude-code`). A model
 your editor does not know about is reachable with `--endpoint <url>` on any of the three
-harnesses. Nothing is written to your editor's configuration either way.
+harnesses. Nothing is written to your editor's configuration either way. And `bench setup`
+drops the isolation instead: it measures your daily configuration as-is — extensions,
+skills, MCP servers — and reports suggestions about that setup beside the score.
 
 Built and used on an **NVIDIA DGX Spark (GB10)**, but the harness itself only needs a URL.
 
@@ -304,4 +338,4 @@ pip install -e .
 ./bench validate
 ```
 
-[**Reproduce a campaign &rarr;**](docs/REPRODUCING.md) · [**Benchmark through your own agent &rarr;**](docs/HARNESSES.md) · [MIT licensed](LICENSE)
+[**Reproduce a campaign &rarr;**](docs/REPRODUCING.md) · [**Benchmark your own setup &rarr;**](docs/HARNESSES.md) · [MIT licensed](LICENSE)
