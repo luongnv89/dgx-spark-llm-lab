@@ -99,6 +99,8 @@ class PiHarness(Harness):
         self.agent_dir = agent_dir or os.environ.get("PI_CODING_AGENT_DIR")
         self.api_key = c.api_key
         self.extra_args = list(c.extra_args)
+        #: live mode: the user's daily setup — extensions and context files on
+        self.live = bool(c.live)
 
     @property
     def uses_endpoint(self):
@@ -240,10 +242,22 @@ class PiHarness(Harness):
 
     def describe(self):
         ok, detail = self.available()
-        return dict(harness="pi", provider=self.provider, model=self.model,
-                    model_spec=self.model_spec, base_url=self.base_url,
-                    source="endpoint" if self.uses_endpoint else "pi-catalogue",
-                    available=ok, detail=detail)
+        d = dict(harness="pi", provider=self.provider, model=self.model,
+                 model_spec=self.model_spec, base_url=self.base_url,
+                 source="endpoint" if self.uses_endpoint else "pi-catalogue",
+                 live=self.live,
+                 available=ok, detail=detail)
+        if self.live:
+            # AGENTS.md guardrail: extensions can call other models. A live run
+            # must say which isolation was dropped so nobody reads its score as
+            # a measurement of the benchmarked model alone.
+            d["disabled_isolation"] = ["--no-extensions", "--no-context-files"]
+            d["caveats"] = [
+                "live mode: pi ran with your own extensions and context files "
+                "(AGENTS.md/CLAUDE.md) enabled. An extension that calls another "
+                "model contaminates this measurement.",
+            ]
+        return d
 
     @property
     def model_spec(self):
@@ -327,8 +341,9 @@ class PiHarness(Harness):
             "--thinking", THINKING_LEVELS[bool(thinking)],
             "--mode", "json",
             "--no-session",         # no state carried between tasks
-            "--no-context-files",   # do not discover AGENTS.md/CLAUDE.md above the temp dir
-            "--no-extensions",      # extensions can call other models — see module docstring
+            # isolation is dropped in live mode (#76): extensions and context
+            # files are part of the user's setup there
+            *([] if self.live else ["--no-context-files", "--no-extensions"]),
             "--approve",            # trust the temp workspace, do not block on a prompt
         ] + self.extra_args
 

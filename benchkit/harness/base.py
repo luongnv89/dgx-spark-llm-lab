@@ -48,6 +48,13 @@ class HarnessConfig:
     binary: str | None = None
     api_key: str | None = None
     extra_args: tuple[str, ...] = ()
+    #: live mode (issue #76): run the user's *daily* configuration as-is —
+    #: extensions, skills, MCP servers, settings files all included. Each
+    #: adapter drops its isolation flags accordingly and records which ones in
+    #: describe(). A live run measures a different thing from an isolated one,
+    #: and can contaminate the measurement if any part of the setup calls a
+    #: model other than the one being benchmarked.
+    live: bool = False
 
 
 class Harness:

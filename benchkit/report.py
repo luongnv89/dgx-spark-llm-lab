@@ -500,7 +500,7 @@ def _raw_data_section(runs, labels):
 
 
 def build(runs, title, question=None, verdict=None, notes=None, short_labels=None,
-          setups=False):
+          setups=False, advice=False):
     """runs: list of loaded result dicts. Returns Markdown source."""
     labels = [_label(r) for r in runs]
     short = short_labels or (_setup_short(runs) if setups
@@ -527,6 +527,14 @@ def build(runs, title, question=None, verdict=None, notes=None, short_labels=Non
     if notes:
         out.append("## Reading the numbers\n")
         out.append(notes.strip() + "\n")
+
+    if advice:
+        # `bench setup run` stamps this on its report (issue #76): actionable
+        # suggestions derived from each run's own numbers.
+        for r in runs:
+            from . import advice as advice_mod
+            out.extend(advice_mod.section(r["summary"],
+                                          title="Suggestions — " + _label(r)))
 
     out.extend(_caveats_section(cfg0, samples, samples_same, agentic))
     out.extend(_raw_data_section(runs, labels))
