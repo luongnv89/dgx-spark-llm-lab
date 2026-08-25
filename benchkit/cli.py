@@ -393,17 +393,22 @@ def _harness_pick(args, endpoint):
     return hmodels.pick(args.harness, entries)
 
 
-def _harness_config(args, h, base_url):
+def _harness_config(args, h, base_url, live=False):
     """The Config one harness run records, label included."""
     cfg = runner.Config(base_url=base_url, model=h.model_spec,
                         label=args.label, thinking=args.thinking, max_tokens=0,
                         samples=args.samples, concurrency=args.concurrency,
                         test_timeout=args.test_timeout)
+    if live:
+        # Stamp live mode on the run config so a report can tell a measurement
+        # of the user's daily setup from one of an isolated harness (#76).
+        cfg.extra["live"] = True
     if not cfg.label:
         # The model belongs in the label: two runs of the same harness on
         # different models are the whole point, and a file named after the
         # harness alone would overwrite one with the other.
-        cfg.label = (f"{h.name} {_slug(str(h.model_spec))} "
+        cfg.label = (f"{h.name} {'live ' if live else ''}"
+                     f"{_slug(str(h.model_spec))} "
                      f"think-{'ON' if args.thinking else 'OFF'}")
     return cfg
 
@@ -424,13 +429,14 @@ def _print_harness_summary(h, summary):
     print("=" * 64)
 
 
-def _harness_run(args, endpoint):
+def _harness_run(args, endpoint, live=False):
     from benchkit import harness as H
     from benchkit.harness import runner as hrunner
 
     provider, model = _harness_pick(args, endpoint)
     h = H.get(args.harness,
-              H.HarnessConfig(provider=provider, model=model, base_url=endpoint))
+              H.HarnessConfig(provider=provider, model=model, base_url=endpoint,
+                              live=live))
     tasks = get(args.suite)
     if kind(args.suite) != "agentic":
         raise SystemExit("harness runs need an agentic suite "
@@ -439,8 +445,9 @@ def _harness_run(args, endpoint):
     if not ok:
         raise SystemExit(f"harness {h.name!r} is not usable here: {detail}")
 
-    cfg = _harness_config(args, h, endpoint or "(harness)")
-    print(f"harness={h.name}  {detail}\nsuite={args.suite} ({len(tasks)} tasks)  "
+    cfg = _harness_config(args, h, endpoint or "(harness)", live=live)
+    print(f"harness={h.name}{'+live' if live else ''}  {detail}\n"
+          f"suite={args.suite} ({len(tasks)} tasks)  "
           f"{cfg.label}  samples={cfg.samples} concurrency={cfg.concurrency}\n", flush=True)
 
     summary, results = hrunner.run(h, tasks, cfg, on_result=_print_agentic,
@@ -453,7 +460,32 @@ def _harness_run(args, endpoint):
 
     _print_harness_summary(h, summary)
     print(f"\nwritten to {out}")
+    if live:
+        # A live run is judged on its own setup, so the advice section is part
+        # of the deliverable, not an extra step. Same append-only rule as the
+        # result json: never overwrite a report from an earlier campaign.
+        md = report.build([report.load(out)], title=f"Live setup: {h.name}",
+                          question=(f"Is {h.name}'s current setup any good, and "
+                                    f"what should improve?"),
+                          verdict=None, advice=True)
+        rpt = os.path.join(os.path.dirname(out), "REPORT-live.md")
+        rpt = _ensure_unique_path(rpt)
+        with open(rpt, "w") as f:
+            f.write(md)
+        print(f"report written to {rpt}")
     return 0
+
+
+def cmd_setup(args):
+    """Benchmark the harness you are sitting in, with its live configuration.
+
+    `bench harness run` isolates: no extensions, no skills, no MCP servers, so
+    the model alone is measured. `bench setup` is the opposite — the user's
+    daily setup runs exactly as they experience it (issue #76), and the report
+    ends with concrete suggestions about that setup.
+    """
+    endpoint = args.endpoint or os.environ.get("BENCH_HARNESS_ENDPOINT") or None
+    return _harness_run(args, endpoint, live=True)
 
 
 def cmd_configs(args):
@@ -657,6 +689,37 @@ def _parser_harness(sub):
     s.set_defaults(func=cmd_harness)
 
 
+def _parser_setup(sub):
+    """`bench setup` — benchmark the harness's live, as-used configuration."""
+    s = sub.add_parser("setup",
+                       help="benchmark a harness with its live configuration "
+                            "(skills, MCP servers, settings included) and get "
+                            "improvement suggestions")
+    s.add_argument("setup_cmd", nargs="?", default="run", choices=["run"],
+                   help="run the live-setup benchmark")
+    s.add_argument("--harness", default="pi",
+                   help="which harness to drive: " + ", ".join(_harness_names()))
+    s.add_argument("--model", "-m", dest="model", default="",
+                   help="model to benchmark, as <provider>/<model> or any unique "
+                        "part of it (default: BENCH_HARNESS_MODEL, else ask; the "
+                        "harness's own default model is usually what you want)")
+    s.add_argument("--provider", help="restrict --model to one provider")
+    s.add_argument("--endpoint", default="",
+                   help="optional endpoint for the model itself; the harness's "
+                        "live configuration is still used unchanged")
+    s.add_argument("--suite", default="agentic-hard", choices=list(SUITES))
+    s.add_argument("--samples", type=int, default=1)
+    s.add_argument("--concurrency", type=int, default=2)
+    s.add_argument("--thinking", action="store_true")
+    s.add_argument("--timeout", type=int, default=900, help="seconds per task")
+    s.add_argument("--test-timeout", type=int, default=60)
+    s.add_argument("--label", default="")
+    s.add_argument("--out")
+    s.add_argument("--keep-dirs", action="store_true",
+                   help="leave each task's working directory on disk for inspection")
+    s.set_defaults(func=cmd_setup)
+
+
 def _parser_configs(sub):
     s = sub.add_parser("configs", help="list known-good serving configs")
     s.set_defaults(func=cmd_configs)
@@ -682,6 +745,7 @@ def _build_parser():
     _parser_compare(sub)
     _parser_sweep(sub)
     _parser_harness(sub)
+    _parser_setup(sub)
     _parser_configs(sub)
     _parser_apply(sub)
     return p
