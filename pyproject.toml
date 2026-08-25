@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dgx-spark-llm-lab"
+name = "m-bench"
 version = "0.1.0"
-description = "Find the best configuration for your daily-driver LLM — then keep it."
+description = "Benchmark your whole LLM setup — serving config, thinking mode, coding harness — on your own machine."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

@@ -1,4 +1,4 @@
-# Modernization Plan — llm-serving (dgx-spark-llm-lab)
+# Modernization Plan — llm-serving (m-bench)
 
 Derived from [`MODERNIZATION_REPORT.md`](./MODERNIZATION_REPORT.md) · **Baseline at audit:** AMBER
 **Test command of record:** `./bench validate && ./bench validate --suite agentic-all` · **Pass rate at audit:** `44/44` (28/28 + 16/16)
