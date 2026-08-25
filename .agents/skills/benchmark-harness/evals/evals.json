@@ -1,0 +1,105 @@
+{
+  "skill_name": "benchmark-harness",
+  "evals": [
+    {
+      "id": 1,
+      "kind": "happy-path",
+      "prompt": "/benchmark-harness",
+      "expected_output": "Detects the harness it is running inside and that harness's current model, runs preflight, prints a confirmation plan, and waits for a go-ahead before launching `bench setup run`.",
+      "files": [],
+      "expectations": [
+        "Ran scripts/detect_setup.sh rather than guessing the harness",
+        "Ran `./bench validate --suite agentic-all` and reported 16/16 before anything else",
+        "The proposed command includes an explicit -m <model spec> (never omitted)",
+        "The proposed command is `bench setup run`, not `bench harness run`",
+        "Defaults shown are suite agentic-hard, samples 1, concurrency 2",
+        "Stopped at the confirm gate instead of launching the suite"
+      ]
+    },
+    {
+      "id": 2,
+      "kind": "happy-path",
+      "prompt": "/benchmark-harness --harness pi -m montimage-dgx-spark --suite agentic --samples 2 --yes",
+      "expected_output": "Skips the confirm gate, runs the named harness/model/suite detached, polls the log, then reports agent score with harness and model named.",
+      "files": [],
+      "expectations": [
+        "User-supplied harness, model, suite and samples override detection",
+        "No confirmation prompt, because --yes was passed",
+        "The run is launched detached (nohup/background) and polled, not run blocking in one tool call",
+        "The final report names the harness, the model and the thinking mode alongside every score",
+        "Mentions the noise rule for small differences at low sample counts"
+      ]
+    },
+    {
+      "id": 3,
+      "kind": "happy-path",
+      "prompt": "benchmark my current setup and tell me what to improve",
+      "expected_output": "Same live-setup run, and the summary condenses the advice section of REPORT-live.md into concrete changes.",
+      "files": [],
+      "expectations": [
+        "Chose the live run (`bench setup run`) and explained it measures the setup, not the model alone",
+        "Read REPORT-live.md and surfaced its setup advice",
+        "Reported where the result JSON and report were written"
+      ]
+    },
+    {
+      "id": 4,
+      "kind": "edge",
+      "prompt": "/benchmark-harness --suite all",
+      "expected_output": "Refuses the one-shot suite, explains harness runs need an agentic suite, and asks which agentic suite to use instead of switching silently.",
+      "files": [],
+      "expectations": [
+        "Did not launch a run with --suite all",
+        "Named agentic, agentic-hard and agentic-all as the valid choices",
+        "Asked the user rather than substituting a suite on its own"
+      ]
+    },
+    {
+      "id": 5,
+      "kind": "edge",
+      "prompt": "/benchmark-harness (in an opencode session that has no default model configured)",
+      "expected_output": "Detection returns an empty model; the skill lists what opencode can reach and asks the user to choose rather than guessing or letting the interactive picker run.",
+      "files": [],
+      "expectations": [
+        "Ran `./bench harness models --harness opencode` and showed the choices",
+        "Asked the user for the model instead of inventing one",
+        "Did not launch `bench setup run` without -m",
+        "Reported thinking as n/a for opencode rather than claiming a mode was set"
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "negative-trigger",
+      "prompt": "Compare qwen3-coder against the incumbent model on the serving endpoint and tell me which to deploy.",
+      "expected_output": "Handled as a normal `bench compare` / serving-config task without invoking this skill's live-setup workflow.",
+      "files": [],
+      "expectations": [
+        "Did not run scripts/detect_setup.sh or `bench setup run`",
+        "Pointed at `bench compare` (or `bench sweep`) as the right tool"
+      ]
+    },
+    {
+      "id": 7,
+      "kind": "negative-trigger",
+      "prompt": "Run the unit tests for benchkit and fix whatever fails.",
+      "expected_output": "Ordinary test-fixing work; the benchmark skill never activates.",
+      "files": [],
+      "expectations": [
+        "No harness detection, no bench setup run, no confirmation plan"
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "edge",
+      "prompt": "<the SKILL.md body is injected into the session with no user message attached, as pi does on /benchmark-harness>",
+      "expected_output": "Treats the injection as the invocation: runs preflight and detection immediately and stops at the confirm gate with a plan.",
+      "files": [],
+      "expectations": [
+        "Did not reply that it is 'ready when you are' or wait for a further request",
+        "Ran the step 1 preflight and scripts/detect_setup.sh without being asked again",
+        "Printed the plan block and stopped at the confirm gate",
+        "Did not launch the suite before the gate"
+      ]
+    }
+  ]
+}

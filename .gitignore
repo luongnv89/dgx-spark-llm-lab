@@ -13,3 +13,6 @@ vllm-qwen-restore.log
 *.egg-info/
 build/
 dist/
+
+# skill-auto-improver iteration artifacts
+.asm-improver/
