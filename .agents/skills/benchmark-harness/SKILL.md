@@ -4,7 +4,7 @@ description: "Evaluate the coding harness you are running inside (pi, opencode, 
 license: MIT
 effort: high
 metadata:
-  version: 1.2.0
+  version: 1.3.0
   author: "Luong NGUYEN <luongnv89@gmail.com>"
   architecture: "inline (single agent, no subagents)"
 ---
@@ -21,12 +21,13 @@ configured right now, and report what to improve. Wraps `./bench setup run` from
 turn attached; never read that absence as "they have not asked yet", and never reply that
 you are ready when they are. Begin at step 1 now.
 
-Run **steps 1–3 immediately** — cheap, read-only, seconds: locate the repo, prove the
-oracles, detect harness and model, print the plan. Then **stop at the confirm gate** in
-step 3. That gate, not this section, protects the user from a 15–40 minute run.
+Run **steps 1–4 immediately** — cheap, read-only, seconds: locate the repo, prove the
+oracles, detect harness and model, record the conditions, print the plan. Then **stop at
+the confirm gate** in step 4. That gate, not this section, protects the user from a 15–40
+minute run.
 
 Exception: the user's message contradicts the plan ("just tell me what you would run",
-`--dry-run`). Stop after step 3 and say so.
+`--dry-run`). Stop after step 4 and say so.
 
 ## When to use
 
@@ -112,7 +113,7 @@ the task (see Guardrails); `pip install -e .` failing → report and stop, never
 `sudo`, `--user` or `--break-system-packages`.
 
 ```
-◆ Preflight (step 1 of 5 — repo + oracles)
+◆ Preflight (step 1 of 6 — repo + oracles)
 ··································································
   Repo located:          √ pass (<path>)
   benchkit importable:   √ pass
@@ -154,7 +155,7 @@ symlink to the same files. It prints `harness=`, `provider=`, `model=`, `model_s
 Per-harness sources, precedence and edge cases: `references/detection.md`.
 
 ```
-◆ Detection (step 2 of 5 — harness + model)
+◆ Detection (step 2 of 6 — harness + model)
 ··································································
   Harness:            √ <name> (<source>)
   Model spec:         √ <provider/model> (<source>)
@@ -164,7 +165,41 @@ Per-harness sources, precedence and edge cases: `references/detection.md`.
   Result:             PASS
 ```
 
-## Step 3 — Confirm the plan
+## Step 3 — Capture the run conditions
+
+A score is unreadable without the machine and setup that produced it, so record both
+before the run starts:
+
+```bash
+mkdir -p /tmp/bench-harness
+bash .agents/skills/benchmark-harness/scripts/collect_context.sh \
+     --harness <h> --model <spec> --thinking <on|off|n/a> > /tmp/bench-harness/context.md
+```
+
+It prints the machine, the GPU and what else is using it, the serving endpoint, and the
+harness's live surface — skills, MCP servers, extensions. Every probe is fail-soft: a
+missing one prints `unknown` rather than blocking the run. Field meanings and how to read
+them: `references/run-context.md`.
+
+Two rows decide whether to run at all:
+
+- **GPU util / other GPU processes.** A device already busy makes wall-clock, turns and
+  timeouts incomparable with any other run. Surface it at the confirm gate and offer to
+  wait rather than quietly producing a number nobody can reuse.
+- **serves.** Empty against a local endpoint means nothing is serving yet — fix that first.
+
+```
+◆ Conditions (step 3 of 6 — machine + setup)
+··································································
+  Machine recorded:   √ <host>, <cpu>, <memory>
+  GPU:                √ <name>, <util> at start, <N> other process(es)
+  Endpoint:           √ <serves> (<base url>)
+  Harness surface:    √ <version>, <N> skills, <N> MCP/extensions
+  ____________________________
+  Result:             PASS | PASS (contended GPU — flagged at the gate)
+```
+
+## Step 4 — Confirm the plan
 
 Skip only on `--yes`. Print exactly what will run, then wait:
 
@@ -177,6 +212,8 @@ mode         LIVE — your skills, MCP servers and settings are part of the meas
 estimate     8 tasks / concurrency 2, up to --timeout 900 s each -> 15-40 min typical
 writes       results/<today>/<label>.json + REPORT-live.md   (append-only)
 cost         billed to your own <harness> account/quota
+machine      dgx-spark — GB10, 120 GiB, GPU 95 % busy (vLLM, 73 GiB) ← flag contention here
+setup        claude-code 2.1.245, 70 skills, 0 MCP servers — all of it is measured
 ```
 
 For **claude-code**, smoke-test the spec first — that adapter cannot enumerate models, so
@@ -189,7 +226,7 @@ timeout 60 claude -p 'reply with OK' --model "<spec>" >/dev/null && echo "model 
 Rejected: retry with the bare alias (`opus[1m]` → `opus`). Done when the user has said go,
 or `--dry-run` stopped you here.
 
-## Step 4 — Run it detached
+## Step 5 — Run it detached
 
 A run outlives any tool timeout, so never block on it:
 
@@ -207,7 +244,7 @@ results/…` and the process is gone. If it dies early, read the last 40 lines a
 `references/failure-modes.md` — never re-run blind.
 
 ```
-◆ Run (step 4 of 5 — <suite>)
+◆ Run (step 5 of 6 — <suite>)
 ··································································
   Process exited:     √ rc=0
   Tasks reported:     √ 8/8
@@ -217,11 +254,23 @@ results/…` and the process is gone. If it dies early, read the last 40 lines a
   Result:             PASS
 ```
 
-## Step 5 — Report
+## Step 6 — Report
 
-Take both paths from the log's `written to …` / `report written to …` lines, read the
-printed summary and the advice section of `REPORT-live.md`, then give the user:
+Take both paths from the log's `written to …` / `report written to …` lines. Append the
+conditions captured in step 3 to the report the run just wrote, so the numbers and the
+setup that produced them stay together:
 
+```bash
+cat /tmp/bench-harness/context.md >> "<results dir>/REPORT-live.md"
+```
+
+Appending to this run's own report is the only write allowed here — never touch a report
+from an earlier campaign. Then read the printed summary and the advice section, and give
+the user:
+
+- **The conditions first** — machine, GPU contention, endpoint, harness version and how
+  much live surface (skills, MCP servers, extensions) was in the loop. A reader who cannot
+  reproduce the conditions cannot use the score.
 - **Agent score** and its two factors (solve rate × efficiency), plus **calls vs par**,
   **turns**, **token** cost in/out per task, **valid tool-call rate**, **wall-clock**.
 - **Harness, model and thinking mode next to every number.** The same model scores 67.4
@@ -238,6 +287,8 @@ in a field this stack always zeroes — the output-token budget is still right.
 ### Expected output
 
 ```
+dgx-spark — GB10 / 120 GiB / Ubuntu 24.04 aarch64, GPU 95 % busy (vLLM 73 GiB)
+endpoint montimage-dgx-spark @ localhost:8001 — claude-code 2.1.245, 70 skills, 0 MCP
 claude-code / opus[1m], thinking n/a — agentic-hard, 1 sample
   agent score        74.2  (solve 87.5 % x efficiency 84.8 %)
   calls vs par       11.4 vs 9.0     turns 6.2
@@ -246,9 +297,11 @@ claude-code / opus[1m], thinking n/a — agentic-hard, 1 sample
 advice: 2 MCP servers add 4.1k tokens to every task and were never called — drop them.
 noise: gaps under 8 points at 1 sample are not real; re-run with --samples 4 to settle.
 written: results/2026-08-25/claude-code-live-opus-1m-think-off.json + REPORT-live.md
+         (run context appended to the report)
 ```
 
-Done when every line above is present and each score carries its harness and model.
+Done when every line above is present, each score carries its harness and model, and the
+report on disk ends with the run-context section.
 
 ## Guardrails
 
@@ -264,4 +317,6 @@ Done when every line above is present and each score carries its harness and mod
 ## References
 
 - `references/detection.md` — per-harness model/thinking sources, precedence, edge cases.
+- `references/run-context.md` — what each captured condition means and when it invalidates
+  a comparison.
 - `references/failure-modes.md` — error message → cause → fix, for every failure seen.
