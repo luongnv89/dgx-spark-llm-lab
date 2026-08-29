@@ -748,6 +748,11 @@ def _build_parser():
     _parser_setup(sub)
     _parser_configs(sub)
     _parser_apply(sub)
+
+    # Surface-layer benchmarking (issue #76 extension)
+    from benchkit import cli_surface  # noqa: E402
+    cli_surface.build_parser(sub)
+
     return p
 
 

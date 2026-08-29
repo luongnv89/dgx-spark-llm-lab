@@ -4,7 +4,7 @@ description: "Evaluate the coding harness you are running inside (pi, opencode, 
 license: MIT
 effort: high
 metadata:
-  version: 1.4.0
+  version: 2.0.0
   author: "Luong NGUYEN <luongnv89@gmail.com>"
   architecture: "inline (single agent, no subagents)"
 ---
@@ -72,6 +72,35 @@ and `--thinking` to each or the comparison is meaningless. Two arms cost twice t
 wall-clock and twice the billing, which is why it is opt-in and why the confirm gate shows
 the doubled estimate. Semantics, per-harness caveats and how to read a delta:
 `references/surface-ab.md`.
+
+**A delta never stands alone.** A live arm can win with a surface that was never invoked,
+in which case the surface did not cause the win. Always report the usage attribution
+(step 6) beside the delta.
+
+### Surface-layer benchmarking (v2 — measure tool value)
+
+When you want to know **whether specific skills/MCP tools/extensions actually help**
+(not just whether they're idle), use the surface-layer workflow:
+
+```bash
+# 1. List all surface tools
+bench surface inventory --harness pi
+
+# 2. Generate tasks targeting specific tools
+bench surface prepare --harness pi --tool pi-extension:advisor-pi/advisor-pi --tool pi-extension:subagents-pi/subagents-pi
+
+# 3. Validate the task pack
+bench surface validate --campaign <campaign-id>
+
+# 4. Run with arms: isolated (no tools), selected (only chosen tools), live (all tools)
+bench surface run --campaign <campaign-id> -m <model> --arms isolated,selected,live
+```
+
+This generates tasks designed to trigger the selected tools, then runs live vs isolated
+arms on the generated tasks. The delta measures whether the surface tools are worth their
+presence. See `benchkit/cli_surface.py` for CLI details.
+
+For general setup benchmarking (the common case), use the traditional flow below.
 
 **A delta never stands alone.** A live arm can win with a surface that was never invoked,
 in which case the surface did not cause the win. Always report the usage attribution
@@ -389,6 +418,51 @@ disk ends with the run-context and surface-usage sections.
   GPU and each becomes a measurement of the other.
 - **Never claim a skill or MCP server helped without a call in the trace.** "Installed" is
   not "used", and the whole point of step 6 is that the score cannot tell them apart.
+
+## Surface-layer benchmarking (v2 — measure tool value)
+
+When you want to know **whether specific skills/MCP tools/extensions actually help**
+(not just whether they're idle), use the surface-layer workflow:
+
+```bash
+# 1. List all surface tools
+bench surface inventory --harness pi
+
+# 2. Generate tasks targeting specific tools
+bench surface prepare --harness pi --tool pi-extension:advisor-pi/advisor-pi --tool pi-extension:subagents-pi/subagents-pi
+
+# 3. Validate the task pack
+bench surface validate <campaign-id>
+
+# 4. Run with arms: isolated (no tools), selected (only chosen tools), live (all tools)
+bench surface run --campaign <campaign-id> -m <model> --arms isolated,selected,live
+```
+
+This generates tasks designed to trigger the selected tools, then runs live vs isolated
+arms on the generated tasks. The delta measures whether the surface tools are worth their
+presence. See `benchkit/cli_surface.py` for CLI details.
+
+### How it works
+
+1. **Inventory** — `bench surface inventory` lists all surface tools for a harness
+   (extensions, MCP servers, skills, plugins) with their surface IDs.
+
+2. **Prepare** — `bench surface prepare` generates a campaign directory containing:
+   - `meta.json` — campaign metadata and pack hash
+   - `tasks.json` — serialized task definitions (without callables)
+   - `tools.json` — tool definitions
+   - `coverage.json` — which tools have tasks
+
+3. **Validate** — `bench surface validate` checks the task pack structure.
+
+4. **Run** — `bench surface run` executes the campaign through one or more arms:
+   - `isolated` — no surface tools (baseline)
+   - `selected` — only the selected tools (not yet fully supported)
+   - `live` — all surface tools (full daily setup)
+
+The comparison table shows agent score, solve rate, efficiency, calls vs par, turns,
+valid call rate, and wall clock for each arm. A delta above 8 points is considered
+significant.
 
 ## References
 

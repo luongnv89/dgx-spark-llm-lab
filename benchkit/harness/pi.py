@@ -65,6 +65,7 @@ import urllib.request
 from .base import Harness, HarnessConfig, HarnessResult
 from .events import parse_events as _parse_events
 from .stream import StreamTimeout, stream_events
+from .surface import SurfaceTool
 
 THINKING_LEVELS = {False: "off", True: "high"}
 
@@ -375,6 +376,97 @@ class PiHarness(Harness):
             res.error = tail[-1][:200] if tail else f"exit {rc}"
         return res
 
+    # --- inventory ------------------------------------------------------
+    def inventory(self, live: bool = True) -> list[SurfaceTool]:
+        """Return the harness's tool inventory.
+
+        In isolated mode (``live=False``) returns an empty list.
+        In live mode, scans the user's extension directory for additional
+        tools and returns them as ``SurfaceTool`` objects.
+        """
+        if not live:
+            return []
+
+        tools: list[SurfaceTool] = []
+        agent_dir = self.agent_dir or DEFAULT_AGENT_DIR
+        ext_dir = os.path.join(os.path.expanduser(agent_dir), "extensions")
+        if not os.path.isdir(ext_dir):
+            return tools
+
+        for entry in sorted(os.listdir(ext_dir)):
+            ext_path = os.path.join(ext_dir, entry)
+            if not os.path.isdir(ext_path):
+                continue
+
+            tool_name = entry
+            description = "unknown extension"
+            surface_id = f"pi-extension:{entry}/{entry}"
+
+            try:
+                # Try package.json first
+                pkg_path = os.path.join(ext_path, "package.json")
+                if os.path.isfile(pkg_path):
+                    with open(pkg_path) as f:
+                        pkg = json.load(f)
+                    tool_name = pkg.get("name", entry)
+                    description = pkg.get("description", "")
+                    surface_id = f"pi-extension:{entry}/{tool_name}"
+
+                # Fall back to SKILL.md for description if package.json
+                # didn't provide one
+                if not description:
+                    skill_path = os.path.join(ext_path, "SKILL.md")
+                    if os.path.isfile(skill_path):
+                        with open(skill_path) as f:
+                            first_line = f.readline().strip()
+                        if first_line:
+                            description = first_line
+
+                # Check for tools/ subdirectory — treat each file as a tool
+                tools_dir = os.path.join(ext_path, "tools")
+                if os.path.isdir(tools_dir):
+                    for tool_entry in sorted(os.listdir(tools_dir)):
+                        tool_file = os.path.join(tools_dir, tool_entry)
+                        if not os.path.isfile(tool_file):
+                            continue
+                        t_name = os.path.splitext(tool_entry)[0]
+                        t_surface_id = f"pi-extension:{entry}/{t_name}"
+                        tools.append(SurfaceTool(
+                            surface_id=t_surface_id,
+                            tool_name=t_name,
+                            source="extension",
+                            source_ref=entry,
+                            description=description,
+                            read_only=False,
+                            is_remote=False,
+                        ))
+                    # If we found tools/, the extension itself is represented
+                    # by those sub-tools rather than as a single entry
+                    continue
+
+                tools.append(SurfaceTool(
+                    surface_id=surface_id,
+                    tool_name=tool_name,
+                    source="extension",
+                    source_ref=entry,
+                    description=description if description else "unknown extension",
+                    read_only=False,
+                    is_remote=False,
+                ))
+            except Exception:  # noqa: BLE001
+                # Fallback for unreadable extensions
+                tools.append(SurfaceTool(
+                    surface_id=f"pi-extension:{entry}/unknown",
+                    tool_name=entry,
+                    source="extension",
+                    source_ref=entry,
+                    description="unknown extension",
+                    read_only=False,
+                    is_remote=False,
+                ))
+
+        return tools
+
 
 def _pi_handler(ev, res, _state):
     """Handle one pi event. Mutates *res* in place."""
@@ -409,6 +501,98 @@ def _pi_handler(ev, res, _state):
 def parse_events(stdout):
     """Fold pi's JSONL event stream into a HarnessResult."""
     return _parse_events(stdout, _pi_handler)
+
+
+    # --- inventory ------------------------------------------------------
+    def inventory(self, live: bool = True) -> list[SurfaceTool]:
+        """Return the harness's tool inventory.
+
+        In isolated mode (``live=False``) returns an empty list.
+        In live mode, scans the user's extension directory for additional
+        tools and returns them as ``SurfaceTool`` objects.
+        """
+        if not live:
+            return []
+
+        tools: list[SurfaceTool] = []
+        agent_dir = self.agent_dir or DEFAULT_AGENT_DIR
+        ext_dir = os.path.join(os.path.expanduser(agent_dir), "extensions")
+        if not os.path.isdir(ext_dir):
+            return tools
+
+        for entry in sorted(os.listdir(ext_dir)):
+            ext_path = os.path.join(ext_dir, entry)
+            if not os.path.isdir(ext_path):
+                continue
+
+            tool_name = entry
+            description = "unknown extension"
+            surface_id = f"pi-extension:{entry}/{entry}"
+
+            try:
+                # Try package.json first
+                pkg_path = os.path.join(ext_path, "package.json")
+                if os.path.isfile(pkg_path):
+                    with open(pkg_path) as f:
+                        pkg = json.load(f)
+                    tool_name = pkg.get("name", entry)
+                    description = pkg.get("description", "")
+                    surface_id = f"pi-extension:{entry}/{tool_name}"
+
+                # Fall back to SKILL.md for description if package.json
+                # didn't provide one
+                if not description:
+                    skill_path = os.path.join(ext_path, "SKILL.md")
+                    if os.path.isfile(skill_path):
+                        with open(skill_path) as f:
+                            first_line = f.readline().strip()
+                        if first_line:
+                            description = first_line
+
+                # Check for tools/ subdirectory — treat each file as a tool
+                tools_dir = os.path.join(ext_path, "tools")
+                if os.path.isdir(tools_dir):
+                    for tool_entry in sorted(os.listdir(tools_dir)):
+                        tool_file = os.path.join(tools_dir, tool_entry)
+                        if not os.path.isfile(tool_file):
+                            continue
+                        t_name = os.path.splitext(tool_entry)[0]
+                        t_surface_id = f"pi-extension:{entry}/{t_name}"
+                        tools.append(SurfaceTool(
+                            surface_id=t_surface_id,
+                            tool_name=t_name,
+                            source="extension",
+                            source_ref=entry,
+                            description=description,
+                            read_only=False,
+                            is_remote=False,
+                        ))
+                    # If we found tools/, the extension itself is represented
+                    # by those sub-tools rather than as a single entry
+                    continue
+
+                tools.append(SurfaceTool(
+                    surface_id=surface_id,
+                    tool_name=tool_name,
+                    source="extension",
+                    source_ref=entry,
+                    description=description if description else "unknown extension",
+                    read_only=False,
+                    is_remote=False,
+                ))
+            except Exception:  # noqa: BLE001
+                # Fallback for unreadable extensions
+                tools.append(SurfaceTool(
+                    surface_id=f"pi-extension:{entry}/unknown",
+                    tool_name=entry,
+                    source="extension",
+                    source_ref=entry,
+                    description="unknown extension",
+                    read_only=False,
+                    is_remote=False,
+                ))
+
+        return tools
 
 
 def _call_failed(ev):
