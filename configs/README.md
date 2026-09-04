@@ -30,6 +30,7 @@ points, not gospel.
 | `qwen3.8-27b-nvfp4-tunable` | Qwen3.8-27B (dense) | NVFP4 | env-tunable | — | — | Sweeping speculative-decoding settings (`K`, `DRAFTER`, `SPEC`) |
 | `gemma4-12b-w4a16` | Gemma 4 12B | QAT W4A16 | 0.16 | built from `@sha256:1962734…` | — | Small secondary backend alongside the primary, on port 8802 |
 | `llamacpp-qwen3.8-27b-bench.sh` | Qwen3.8-27B GGUF | Q4_K_M | — | ~11.6 tok/s | — | llama.cpp comparison, not a vLLM recipe |
+| (no recipe — evaluated, not adopted) | Qwen3.8-Flash-Next NVFP4 (Mia-AiLab, 99 GB, PLE-offload, solo tenant) | NVFP4+MXFP8 | ~100 GB, KV cut 22→18 GiB to fit | `vllm/vllm-openai:qwen38-flash-next` | 87.5 % think-OFF / 58.9 % think-ON / 87.5 % agentic-OFF / 87.5 % agentic-ON — see [`../results/2026-09-04/REPORT-flash-next-analysis.md`](../results/2026-09-04/REPORT-flash-next-analysis.md) | **Not adopted.** Only win is think-OFF (+7pp, noise); loses think-ON and both agentic modes, 2–3× slower, shipped defaults fail this box's safety check |
 
 "Measured" links to the campaign in [`../results/`](../results/) that produced it.
 Where a cell is blank, that config has not been put through the coding suite.
