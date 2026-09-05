@@ -153,6 +153,8 @@ as a model number.
 | [2026-08-20](results/2026-08-20-pi-harness/REPORT-hard.md) | On tasks that can still be failed, does the harness change the ranking? | **Yes.** `claude-code` 68.2, `opencode` 60.3, `pi` 55.0, built-in 44.9 — prefill spans ~16k to ~179k input tokens per task |
 | [2026-08-21](results/2026-08-21/) | Can a free stealth cloud model drive a real tool loop? | **Yes.** 74.8 agent score, 96.9 % solve via opencode — every failure was a generation that never reasoned ([report](results/2026-08-21/REPORT.md)) |
 | [2026-08-26](results/2026-08-26/) | Benchmarks harness: muse-spark-1.2 vs mimo-v2.5-free (opencode) | **mimo-v2.5-free wins.** Live: 56.7 vs 44.1 agent score; isolated: 71.0 vs 56.2. Both models scored better stripped of idle skills. Mimo's calls/par ratio (6.5/5.9) was nearly optimal; Muse Spark's was 2× par ([reports](results/2026-08-26/)) |
+| [2026-09-04](results/2026-09-04/REPORT-flash-next-analysis.md) | Should Qwen3.8-Flash-Next replace Qwen3.6-35B-A3B for local hosting? | **No.** Wins only think-OFF (+7pp, noise); loses think-ON 58.9 vs 78.6 (21 truncated) and both agentic modes at 2–17× wall time. Solo tenant (~100 GB), shipped KV default fails this box's safety check |
+| [2026-09-05](results/2026-09-05/REPORT-flash-next-v2-analysis.md) | Does updated Flash-Next HEAD change the verdict? | **No.** All deltas vs 09-04 within noise (85.7 / 53.6 / 87.5 / 81.2). Reliability fixed (ships bootable defaults, zero watchdog events) — accuracy did not move |
 
 The recurring lesson: benchmark both thinking modes on the workload you actually run,
 through the agent you actually run it. Reasoning-trained models collapse without their
